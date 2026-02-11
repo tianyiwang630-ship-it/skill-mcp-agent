@@ -45,20 +45,20 @@ pip install -r requirements.txt
 
 ### 2. 配置 LLM
 
-编辑 `agent/core/config.py`，设置您的 LLM 配置：
-
-```python
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://your-llm-api.com")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "your-api-key")
-LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "your-model-name")
-```
-
-或通过环境变量设置：
+通过环境变量设置您的 LLM 配置：
 
 ```bash
 export LLM_BASE_URL="https://your-llm-api.com"
 export LLM_API_KEY="your-api-key"
 export LLM_MODEL_NAME="your-model-name"
+```
+
+或创建 `.env` 文件（项目根目录）：
+
+```env
+LLM_BASE_URL=https://your-llm-api.com
+LLM_API_KEY=your-api-key
+LLM_MODEL_NAME=your-model-name
 ```
 
 ### 3. 添加 MCP Servers
@@ -430,20 +430,20 @@ pip install -r requirements.txt
 
 ### 2. Configure LLM
 
-Edit `agent/core/config.py`:
-
-```python
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://your-llm-api.com")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "your-api-key")
-LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "your-model-name")
-```
-
-Or set via environment variables:
+Set via environment variables:
 
 ```bash
 export LLM_BASE_URL="https://your-llm-api.com"
 export LLM_API_KEY="your-api-key"
 export LLM_MODEL_NAME="your-model-name"
+```
+
+Or create `.env` file in project root:
+
+```env
+LLM_BASE_URL=https://your-llm-api.com
+LLM_API_KEY=your-api-key
+LLM_MODEL_NAME=your-model-name
 ```
 
 ### 3. Add MCP Servers
