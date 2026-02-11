@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "open-websearch@latest"],
+  "env": {
+    "DEFAULT_SEARCH_ENGINE": "duckduckgo",
+    "MODE": "stdio"
+  },
+  "description": "Multi-engine web search (Bing, DuckDuckGo, Exa, Brave, Baidu, etc.)"
+}

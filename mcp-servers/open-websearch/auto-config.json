@@ -1,0 +1,17 @@
+{
+  "_comment": "此文件由 MCP Scanner 自动生成，请勿手动编辑",
+  "name": "open-websearch",
+  "type": "stdio",
+  "command": "npx",
+  "args": [
+    "-y",
+    "open-websearch@latest"
+  ],
+  "env": {
+    "DEFAULT_SEARCH_ENGINE": "duckduckgo",
+    "MODE": "stdio"
+  },
+  "cwd": "D:\\files\\demo\\skills-mcp-beta\\mcp-servers\\open-websearch",
+  "description": "Multi-engine web search (Bing, DuckDuckGo, Exa, Brave, Baidu, etc.)",
+  "source": "custom"
+}
