@@ -1,0 +1,14 @@
+{
+  "_comment": "此文件由 MCP Scanner 自动生成，请勿手动编辑",
+  "name": "playwright",
+  "type": "stdio",
+  "command": "npx",
+  "args": [
+    "@playwright/mcp@latest",
+    "--headless"
+  ],
+  "env": {},
+  "cwd": "D:\\files\\demo\\skills-mcp-beta\\mcp-servers\\playwright",
+  "description": "Playwright browser automation - 浏览器自动化，支持 JS 渲染页面的内容获取",
+  "source": "custom"
+}
