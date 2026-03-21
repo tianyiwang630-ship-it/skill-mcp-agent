@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "type": "stdio",
+  "command": "node",
+  "args": [
+    "node_modules/@playwright/mcp/cli.js",
+    "--config",
+    "playwright.mcp.config.json"
+  ],
+  "description": "Playwright browser automation"
+}

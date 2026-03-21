@@ -10,7 +10,7 @@ COMPRESSION_THRESHOLD = 0.5  # Compress when history reaches 50% of available sp
 COMPRESSION_INPUT_RATIO = 0.9  # Summary LLM can receive up to 90% of max tokens
 
 # ========== Tool Execution ==========
-MAX_TOOL_RESULT_CHARS = 90000  # Truncate individual tool results to 30K chars
+MAX_TOOL_RESULT_CHARS = 30000  # Truncate individual tool results to 30K chars
 BASH_TOOL_TIMEOUT = 300  # Bash tool execution timeout (seconds)
 
 # ========== LLM Responses ==========

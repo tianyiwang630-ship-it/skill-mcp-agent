@@ -1,7 +1,5 @@
 {
   "_comment": "MCP 分类管理。category: core(常驻上下文) / searchable(按需搜索)。alias: 中文别名（可选）。不在此文件中的 server 默认 searchable。",
   "playwright":         { "category": "core" },
-  "open-websearch":     { "category": "core" },
-  "rednote":            { "category": "searchable", "alias": "小红书" },
-  "court-listener-mcp": { "category": "searchable", "alias": "美国法律数据库" }
+  "open-websearch":     { "category": "core" }
 }
