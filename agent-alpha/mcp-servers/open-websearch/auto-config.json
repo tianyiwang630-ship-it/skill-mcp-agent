@@ -11,7 +11,7 @@
     "DEFAULT_SEARCH_ENGINE": "duckduckgo",
     "MODE": "stdio"
   },
-  "cwd": "D:\\files\\demo\\skills-mcp-beta\\mcp-servers\\open-websearch",
+  "cwd": "D:\\files\\demo\\0312-newagent\\agent-alpha\\mcp-servers\\open-websearch",
   "description": "Multi-engine web search (Bing, DuckDuckGo, Exa, Brave, Baidu, etc.)",
   "source": "custom"
 }

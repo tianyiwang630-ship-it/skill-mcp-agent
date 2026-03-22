@@ -1,2 +1,3 @@
-2026/03/21-17:58:53.384 76e4 Creating DB D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Session Storage since it was missing.
-2026/03/21-17:58:53.406 76e4 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Session Storage/MANIFEST-000001
+2026/03/22-15:45:41.926 a7c0 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Session Storage/MANIFEST-000001
+2026/03/22-15:45:41.927 a7c0 Recovering log #3
+2026/03/22-15:45:41.932 a7c0 Reusing old log D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Session Storage/000003.log 

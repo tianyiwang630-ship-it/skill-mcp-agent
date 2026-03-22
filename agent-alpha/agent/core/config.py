@@ -22,10 +22,3 @@ TIKTOKEN_ENCODING = "cl100k_base"  # Encoding for token counting
 
 # ========== MCP Tool Search ==========
 DEFAULT_MCP_CATEGORY = "searchable"  # Default category for MCP servers not in registry.json
-
-# ========== LLM Configuration ==========
-import os
-
-LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-LLM_API_KEY = os.getenv("LLM_API_KEY")
-LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME")

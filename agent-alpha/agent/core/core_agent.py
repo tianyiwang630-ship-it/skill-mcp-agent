@@ -35,9 +35,16 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 class Agent:
     """Reusable agent instance with workspace-scoped session state."""
 
-    def __init__(self, max_turns: int = 5000, workspace_root: str | None = None, task_id: str | None = None):
+    def __init__(
+        self,
+        max_turns: int = 5000,
+        workspace_root: str | None = None,
+        task_id: str | None = None,
+        llm_profile_name: str | None = None,
+    ):
         self.workspace_root = Path(workspace_root).resolve() if workspace_root else PROJECT_ROOT.resolve()
         self.task_id = task_id
+        self.llm_profile_name = llm_profile_name
         self.session_id = self._generate_session_id()
         self.session_start_time = datetime.now()
 
@@ -51,7 +58,7 @@ class Agent:
         self.temp_dir = self.session_paths.temp_dir
         self.logs_dir = self.session_paths.logs_dir
 
-        self.llm = LLMClient()
+        self.llm = LLMClient.from_profile(llm_profile_name)
         self.skill_loader = SkillLoader(PROJECT_ROOT / "skills")
         self.tool_loader = ToolLoader(project_root=PROJECT_ROOT, skill_loader=self.skill_loader)
         self.max_turns = max_turns

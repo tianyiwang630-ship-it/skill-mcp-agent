@@ -1,0 +1,5 @@
+$env:ZHIPU_API_KEY="9bbc18731138443084b26ce3b6993601.oKMTlAKrkLdPdkCV"
+$env:MINIMAX_API_KEY="sk-cp-G5VMaOAYyYbFG--CE6-2cvAuAqBE6GmKVhMZ-MlW6Jc02cJwBsYnx8wekwofOIQX6Mid-iGeFRFOlF2tNu_-Wlv0hmPAKKjIN4aB-SNnd8Wjq7sHNoj0keE"
+
+cd D:\files\demo\0312-newagent\agent-alpha
+D:\Anaconda\envs\ai12\python.exe -m agent.core.main

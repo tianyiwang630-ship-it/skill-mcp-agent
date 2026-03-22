@@ -1,0 +1,17 @@
+{
+  "default": "minimax",
+  "profiles": {
+    "glm": {
+      "provider": "zhipu",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key_env": "ZHIPU_API_KEY",
+      "model": "glm-5-turbo"
+    },
+    "minimax": {
+      "provider": "minimax",
+      "base_url": "https://api.minimax.chat/v1",
+      "api_key_env": "MINIMAX_API_KEY",
+      "model": "MiniMax-M2.7"
+    }
+  }
+}

@@ -1,15 +1,21 @@
 from openai import OpenAI
 from typing import List, Dict, Any, Optional
 
-from agent.core.config import LLM_MAX_TOKENS, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL_NAME
+from agent.core.config import LLM_MAX_TOKENS
+from agent.core.llm_profiles import LLMProfile, load_llm_profile
 
 class LLMClient:
-    def __init__(self, model_name: str = LLM_MODEL_NAME):
+    def __init__(self, profile: LLMProfile):
+        self.profile = profile
         self.client = OpenAI(
-            base_url=LLM_BASE_URL,
-            api_key=LLM_API_KEY
+            base_url=profile.base_url,
+            api_key=profile.api_key
         )
-        self.model_name = model_name
+        self.model_name = profile.model
+
+    @classmethod
+    def from_profile(cls, profile_name: str | None = None) -> "LLMClient":
+        return cls(load_llm_profile(profile_name))
 
     def generate(self, prompt: str, max_tokens: int = LLM_MAX_TOKENS) -> str:
         """

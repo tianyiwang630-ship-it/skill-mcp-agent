@@ -1,2 +1,3 @@
-2026/03/21-17:58:53.287 5500 Creating DB D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Sync Data\LevelDB since it was missing.
-2026/03/21-17:58:53.292 5500 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Sync Data\LevelDB/MANIFEST-000001
+2026/03/22-15:45:41.807 8bd8 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Sync Data\LevelDB/MANIFEST-000001
+2026/03/22-15:45:41.807 8bd8 Recovering log #3
+2026/03/22-15:45:41.807 8bd8 Reusing old log D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Sync Data\LevelDB/000003.log 

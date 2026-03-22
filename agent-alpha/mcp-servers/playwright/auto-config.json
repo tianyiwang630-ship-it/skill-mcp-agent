@@ -1,0 +1,15 @@
+{
+  "_comment": "此文件由 MCP Scanner 自动生成，请勿手动编辑",
+  "name": "playwright",
+  "type": "stdio",
+  "command": "node",
+  "args": [
+    "server.js",
+    "--config",
+    "playwright.headed.config.json"
+  ],
+  "env": {},
+  "cwd": "D:\\files\\demo\\0312-newagent\\agent-alpha\\mcp-servers\\playwright",
+  "description": "Playwright browser automation with local headed/headless wrapper",
+  "source": "custom"
+}

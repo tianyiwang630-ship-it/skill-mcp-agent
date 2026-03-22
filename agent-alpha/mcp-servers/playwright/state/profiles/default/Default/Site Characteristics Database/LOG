@@ -1,2 +1,3 @@
-2026/03/21-17:58:53.294 4d90 Creating DB D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Site Characteristics Database since it was missing.
-2026/03/21-17:58:53.300 4d90 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Site Characteristics Database/MANIFEST-000001
+2026/03/22-15:45:41.811 92d0 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Site Characteristics Database/MANIFEST-000001
+2026/03/22-15:45:41.812 92d0 Recovering log #3
+2026/03/22-15:45:41.813 92d0 Reusing old log D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Site Characteristics Database/000003.log 

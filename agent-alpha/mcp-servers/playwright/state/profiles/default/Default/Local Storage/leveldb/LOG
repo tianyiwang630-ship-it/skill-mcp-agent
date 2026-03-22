@@ -1,2 +1,5 @@
-2026/03/21-17:58:53.323 76e4 Creating DB D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Local Storage\leveldb since it was missing.
-2026/03/21-17:58:53.338 76e4 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Local Storage\leveldb/MANIFEST-000001
+2026/03/22-15:45:41.839 a7c0 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Local Storage\leveldb/MANIFEST-000001
+2026/03/22-15:45:41.842 a7c0 Recovering log #3
+2026/03/22-15:45:41.845 a7c0 Reusing old log D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\Local Storage\leveldb/000003.log 
+2026/03/22-15:46:15.632 a7c0 Level-0 table #5: started
+2026/03/22-15:46:15.637 a7c0 Level-0 table #5: 24050 bytes OK

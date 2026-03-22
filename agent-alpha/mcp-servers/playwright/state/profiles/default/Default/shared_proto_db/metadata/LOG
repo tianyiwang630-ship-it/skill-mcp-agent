@@ -1,2 +1,3 @@
-2026/03/21-17:58:53.390 a7a0 Creating DB D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\shared_proto_db\metadata since it was missing.
-2026/03/21-17:58:53.396 a7a0 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\shared_proto_db\metadata/MANIFEST-000001
+2026/03/22-15:45:41.928 4b40 Reusing MANIFEST D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\shared_proto_db\metadata/MANIFEST-000001
+2026/03/22-15:45:41.929 4b40 Recovering log #3
+2026/03/22-15:45:41.929 4b40 Reusing old log D:\files\demo\0312-newagent\agent-alpha\mcp-servers\playwright\state\profiles\default\Default\shared_proto_db\metadata/000003.log 

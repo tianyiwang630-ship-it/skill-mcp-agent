@@ -37,3 +37,31 @@ def test_agent_uses_session_layout_and_loads_session_prompt_docs():
         assert "You are a patient planner." in agent.system_prompt
     finally:
         cleanup_test_dir(tmp_dir)
+
+
+def test_agent_uses_selected_llm_profile():
+    tmp_dir = make_test_dir("core-agent-profile")
+    try:
+        workspace_root = tmp_dir / "workspace"
+        captured = {}
+
+        class DummyLLM:
+            pass
+
+        def fake_from_profile(profile_name=None):
+            captured["profile_name"] = profile_name
+            return DummyLLM()
+
+        with patch.object(Agent, "_generate_session_id", lambda self: "sess002"), patch(
+            "agent.core.core_agent.ToolLoader.load_all",
+            lambda self: [],
+        ), patch(
+            "agent.core.core_agent.LLMClient.from_profile",
+            side_effect=fake_from_profile,
+        ):
+            agent = Agent(workspace_root=str(workspace_root), llm_profile_name="kimi-fast")
+
+        assert captured["profile_name"] == "kimi-fast"
+        assert isinstance(agent.llm, DummyLLM)
+    finally:
+        cleanup_test_dir(tmp_dir)
