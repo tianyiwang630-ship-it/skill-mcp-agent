@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -23,7 +22,7 @@ from agent.core.config import KEEP_RECENT_TURNS, MAX_CONTEXT_TOKENS, MAX_TOOL_RE
 from agent.core.context_manager import ContextManager
 from agent.core.llm import LLMClient
 from agent.core.prompt_docs_loader import load_session_prompt_documents
-from agent.core.session_paths import SessionPaths, create_session_paths
+from agent.core.session_paths import AgentWorkspacePaths, ensure_agent_workspace
 from agent.core.skill_loader import SkillLoader
 from agent.core.system_prompt_builder import build_system_prompt
 from agent.core.tool_loader import ToolLoader
@@ -39,24 +38,19 @@ class Agent:
         self,
         max_turns: int = 5000,
         workspace_root: str | None = None,
+        logs_dir: str | None = None,
         task_id: str | None = None,
         llm_profile_name: str | None = None,
     ):
         self.workspace_root = Path(workspace_root).resolve() if workspace_root else PROJECT_ROOT.resolve()
+        self.runtime_logs_dir = Path(logs_dir).resolve() if logs_dir else None
         self.task_id = task_id
         self.llm_profile_name = llm_profile_name
-        self.session_id = self._generate_session_id()
-        self.session_start_time = datetime.now()
 
-        self.session_paths: SessionPaths = create_session_paths(
-            workspace_root=self.workspace_root,
-            session_id=self.session_id,
-        )
-        self.session_root = self.session_paths.session_root
-        self.input_dir = self.session_paths.input_dir
-        self.output_dir = self.session_paths.output_dir
-        self.temp_dir = self.session_paths.temp_dir
-        self.logs_dir = self.session_paths.logs_dir
+        self.workspace_paths: AgentWorkspacePaths = ensure_agent_workspace(self.workspace_root)
+        self.input_dir = self.workspace_paths.input_dir
+        self.output_dir = self.workspace_paths.output_dir
+        self.temp_dir = self.workspace_paths.temp_dir
 
         self.llm = LLMClient.from_profile(llm_profile_name)
         self.skill_loader = SkillLoader(PROJECT_ROOT / "skills")
@@ -83,19 +77,13 @@ class Agent:
             keep_recent_turns=KEEP_RECENT_TURNS,
         )
 
-    def _generate_session_id(self) -> str:
-        import uuid
-
-        return uuid.uuid4().hex[:6]
-
     def _build_system_prompt(self) -> str:
         return build_system_prompt(
             workspace_root=self.workspace_root,
-            session_root=self.session_root,
             input_dir=self.input_dir,
             output_dir=self.output_dir,
             temp_dir=self.temp_dir,
-            logs_dir=self.logs_dir,
+            logs_dir=self.runtime_logs_dir,
             skills_dir=PROJECT_ROOT / "skills",
             mcp_servers_dir=PROJECT_ROOT / "mcp-servers",
             mcp_registry_path=PROJECT_ROOT / "mcp-servers" / "registry.json",
@@ -146,12 +134,15 @@ class Agent:
         return thread
 
     def get_context_json(self) -> str:
-        context = {
+        context = self.get_session_log_data()
+        return json.dumps(context, ensure_ascii=False, indent=2)
+
+    def get_session_log_data(self) -> Dict[str, Any]:
+        return {
             "system_prompt": self.system_prompt,
             "available_tools": len(self.tools),
             "history": self.history,
         }
-        return json.dumps(context, ensure_ascii=False, indent=2)
 
     def save_context(self, filepath: str):
         Path(filepath).write_text(self.get_context_json(), encoding="utf-8")
@@ -160,54 +151,3 @@ class Agent:
     def reset(self):
         self.history = []
         print("Session history cleared.")
-
-    def save_session_log(self):
-        if not self.history:
-            print("No session history to save.")
-            return
-
-        session_end_time = datetime.now()
-        timestamp = self.session_start_time.strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"{timestamp}_session_{self.session_id}.json"
-        filepath = self.logs_dir / filename
-
-        log_data = {
-            "session_id": self.session_id,
-            "start_time": self.session_start_time.isoformat(),
-            "end_time": session_end_time.isoformat(),
-            "duration_seconds": (session_end_time - self.session_start_time).total_seconds(),
-            "total_turns": len([msg for msg in self.history if msg["role"] == "user"]),
-            "history": self.history,
-        }
-
-        try:
-            filepath.write_text(json.dumps(log_data, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"Saved session log: {filepath}")
-            self._append_session_index(filepath)
-        except Exception as exc:  # pragma: no cover - logging fallback
-            print(f"Failed to save session log: {exc}")
-
-    def _append_session_index(self, log_filepath: Path):
-        try:
-            index_file = self.workspace_root / "sessions" / "index.md"
-            index_file.parent.mkdir(parents=True, exist_ok=True)
-
-            user_turns = len([message for message in self.history if message["role"] == "user"])
-            first_msg = next((m["content"][:100] for m in self.history if m["role"] == "user"), "")
-            first_msg = first_msg.replace("\n", " ").replace("|", "/")
-            has_temp = self.temp_dir.exists() and any(self.temp_dir.iterdir())
-
-            if not index_file.exists():
-                header = "# Session Index\n\n"
-                header += "| Session ID | Started | User Turns | Temp Dir | Log File | First User Message |\n"
-                header += "|---|---|---:|---|---|---|\n"
-                index_file.write_text(header, encoding="utf-8")
-
-            time_str = self.session_start_time.strftime("%m-%d %H:%M")
-            temp_str = str(self.temp_dir.relative_to(self.workspace_root)) if has_temp else "-"
-            log_str = str(log_filepath.relative_to(self.workspace_root))
-            line = f"| {self.session_id} | {time_str} | {user_turns} | {temp_str} | {log_str} | {first_msg} |\n"
-            with open(index_file, "a", encoding="utf-8") as handle:
-                handle.write(line)
-        except Exception as exc:  # pragma: no cover - logging fallback
-            print(f"Failed to update session index: {exc}")

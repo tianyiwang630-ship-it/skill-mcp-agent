@@ -39,11 +39,10 @@ def _build_prompt_documents_section(prompt_documents: Optional[List[Dict[str, st
 def build_system_prompt(
     *,
     workspace_root: Path,
-    session_root: Path,
     input_dir: Path,
     output_dir: Path,
     temp_dir: Path,
-    logs_dir: Path,
+    logs_dir: Path | None,
     skills_dir: Path,
     mcp_servers_dir: Path,
     mcp_registry_path: Path,
@@ -55,29 +54,34 @@ def build_system_prompt(
     task_line = f"Task ID: {task_id}" if task_id else "Task ID: (not set)"
     skills_section = _build_skill_lines(skill_summaries)
     prompt_docs_section = _build_prompt_documents_section(prompt_documents)
+    logs_line = str(logs_dir) if logs_dir else "(not provided by runner)"
 
     return f"""You are an agent running inside agent-alpha.
 
-## Runtime Paths
+## Working Directories
 {task_line}
-Workspace root: {workspace_root}
-Session root: {session_root}
-Session input directory: {input_dir}
-Session output directory: {output_dir}
-Session temp directory: {temp_dir}
-Logs directory: {logs_dir}
+Workspace: {workspace_root}
+Input directory: {input_dir}
+Output directory: {output_dir}
+Temp directory: {temp_dir}
 
-## Project Resources
-Skills root: {skills_dir}
-MCP servers root: {mcp_servers_dir}
+## System Resource Paths
+Skills directory: {skills_dir}
+MCP servers directory: {mcp_servers_dir}
 MCP registry: {mcp_registry_path}
 
+## Runtime Records
+Logs directory: {logs_line}
+
 ## Workspace Rules
-- Read task inputs from the session input directory first.
-- Write final deliverables to the session output directory unless the user asks otherwise.
-- Use the session temp directory for intermediate files and scratch outputs.
-- Session-specific rules and persona can be provided through AGENTS.md and SOUL.md in the session input directory.
+- Read task inputs from the input directory first.
+- Write final deliverables to the output directory unless the user asks otherwise.
+- Use the temp directory for intermediate files and scratch outputs.
+- Session-specific rules and persona can be provided through AGENTS.md and SOUL.md in the input directory.
 - Skill bodies are loaded on demand with `load_skill`; do not assume a skill's full content before loading it.
+- System resource paths are primarily for reading and reference. Modify `skills` or `mcp-servers` only when the task explicitly requires maintaining those resources.
+- Update the MCP registry only when MCP registration or categorization truly needs to change.
+- Logs are runtime records, not the default place for normal task outputs.
 
 ## Skills
 Skills available:

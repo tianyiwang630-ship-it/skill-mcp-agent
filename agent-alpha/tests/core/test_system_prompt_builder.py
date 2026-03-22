@@ -11,19 +11,17 @@ from agent.core.system_prompt_builder import build_system_prompt
 
 
 def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
-    workspace_root = Path("D:/demo/workspace")
-    session_root = workspace_root / "sessions" / "abc123"
-    input_dir = session_root / "input"
-    output_dir = session_root / "output"
-    temp_dir = session_root / "temp"
-    logs_dir = workspace_root / "logs"
+    workspace_root = Path("D:/demo/workspace/session-abc123")
+    input_dir = workspace_root / "input"
+    output_dir = workspace_root / "output"
+    temp_dir = workspace_root / "temp"
+    logs_dir = Path("D:/demo/workspace/logs")
     skills_dir = Path("D:/demo/project/skills")
     mcp_servers_dir = Path("D:/demo/project/mcp-servers")
     mcp_registry_path = mcp_servers_dir / "registry.json"
 
     prompt = build_system_prompt(
         workspace_root=workspace_root,
-        session_root=session_root,
         input_dir=input_dir,
         output_dir=output_dir,
         temp_dir=temp_dir,
@@ -55,12 +53,17 @@ def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
     )
 
     assert "task-1" in prompt
+    assert "## Working Directories" in prompt
+    assert "## System Resource Paths" in prompt
+    assert "## Runtime Records" in prompt
     assert str(workspace_root) in prompt
-    assert str(session_root) in prompt
     assert str(logs_dir) in prompt
     assert str(skills_dir) in prompt
     assert str(mcp_servers_dir) in prompt
     assert str(mcp_registry_path) in prompt
+    assert "Write final deliverables to the output directory" in prompt
+    assert "System resource paths are primarily for reading and reference" in prompt
+    assert "Logs are runtime records" in prompt
     assert "Skills available:" in prompt
     assert "- pdf: Process PDF files" in prompt
     assert str(skills_dir / "pdf" / "SKILL.md") in prompt
