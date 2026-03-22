@@ -1,0 +1,15 @@
+{
+  "name": "playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Playwright MCP wrapper with headed/headless configs and shared storage state.",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "scripts": {
+    "check:server": "node server.js --help",
+    "refresh:official": "npm install --save-exact @playwright/mcp@0.0.68"
+  },
+  "dependencies": {
+    "@playwright/mcp": "0.0.68"
+  }
+}

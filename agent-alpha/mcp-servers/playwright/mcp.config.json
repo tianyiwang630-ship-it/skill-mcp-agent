@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "type": "stdio",
+  "command": "node",
+  "args": [
+    "server.js",
+    "--config",
+    "playwright.headed.config.json"
+  ],
+  "description": "Playwright browser automation with local headed/headless wrapper"
+}
+
