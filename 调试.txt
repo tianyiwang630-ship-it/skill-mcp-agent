@@ -1,5 +1,13 @@
+#环境变量
 $env:ZHIPU_API_KEY="9bbc18731138443084b26ce3b6993601.oKMTlAKrkLdPdkCV"
 $env:MINIMAX_API_KEY="sk-cp-G5VMaOAYyYbFG--CE6-2cvAuAqBE6GmKVhMZ-MlW6Jc02cJwBsYnx8wekwofOIQX6Mid-iGeFRFOlF2tNu_-Wlv0hmPAKKjIN4aB-SNnd8Wjq7sHNoj0keE"
 
+#cli
 cd D:\files\demo\0312-newagent\agent-alpha
 D:\Anaconda\envs\ai12\python.exe -m agent.core.main
+
+#远程
+git remote add origin https://github.com/你的用户名/你的仓库名.git
+git fetch origin
+git push origin refs/remotes/origin/main:refs/heads/main-backup-x.x
+git push --force-with-lease origin 目前的:main
