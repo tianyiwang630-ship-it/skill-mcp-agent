@@ -38,10 +38,8 @@ def _build_prompt_documents_section(prompt_documents: Optional[List[Dict[str, st
 
 def build_system_prompt(
     *,
-    workspace_root: Path,
-    input_dir: Path,
-    output_dir: Path,
-    temp_dir: Path,
+    private_workspace: Path,
+    additional_workspaces: Optional[List[Path]] = None,
     logs_dir: Path | None,
     skills_dir: Path,
     mcp_servers_dir: Path,
@@ -55,15 +53,18 @@ def build_system_prompt(
     skills_section = _build_skill_lines(skill_summaries)
     prompt_docs_section = _build_prompt_documents_section(prompt_documents)
     logs_line = str(logs_dir) if logs_dir else "(not provided by runner)"
+    additional_workspace_lines = "\n".join(
+        f"- {path}" for path in (additional_workspaces or [])
+    ) or "(none)"
 
     return f"""You are an agent running inside agent-alpha.
 
-## Working Directories
+## Private Workspace
 {task_line}
-Workspace: {workspace_root}
-Input directory: {input_dir}
-Output directory: {output_dir}
-Temp directory: {temp_dir}
+Primary workspace: {private_workspace}
+
+## Additional Workspaces
+{additional_workspace_lines}
 
 ## System Resource Paths
 Skills directory: {skills_dir}
@@ -74,10 +75,11 @@ MCP registry: {mcp_registry_path}
 Logs directory: {logs_line}
 
 ## Workspace Rules
-- Read task inputs from the input directory first.
-- Write final deliverables to the output directory unless the user asks otherwise.
-- Use the temp directory for intermediate files and scratch outputs.
-- Session-specific rules and persona can be provided through AGENTS.md and SOUL.md in the input directory.
+- AGENTS.md and SOUL.md are only loaded from the private workspace root.
+- Do not scan nested folders for AGENTS.md or SOUL.md.
+- The private workspace is this agent's dedicated workspace. It may contain persona docs, private reference materials, and active work files.
+- Additional workspaces may also contain files that this agent needs to read or modify.
+- If multiple workspaces are provided, their roles should be interpreted from AGENTS.md.
 - Skill bodies are loaded on demand with `load_skill`; do not assume a skill's full content before loading it.
 - System resource paths are primarily for reading and reference. Modify `skills` or `mcp-servers` only when the task explicitly requires maintaining those resources.
 - Update the MCP registry only when MCP registration or categorization truly needs to change.
@@ -91,5 +93,5 @@ Skills available:
 
 ## Large File Strategy
 - For large outputs, prefer writing a complete file first and appending follow-up sections if needed.
-- Use temp files for drafts or multi-step transformations before producing the final result.
+- When the user does not specify a target directory, choose the most appropriate workspace based on the task context and AGENTS.md guidance.
 """

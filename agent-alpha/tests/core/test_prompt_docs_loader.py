@@ -8,23 +8,27 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from tests.conftest import cleanup_test_dir, make_test_dir
-from agent.core.prompt_docs_loader import load_session_prompt_documents
+from agent.core.prompt_docs_loader import load_workspace_prompt_documents
 
 
-def test_load_session_prompt_documents_reads_agents_and_soul():
+def test_load_workspace_prompt_documents_reads_first_workspace_root_docs():
     tmp_dir = make_test_dir("prompt-docs")
     try:
-        input_dir = tmp_dir / "sessions" / "abc123" / "input"
-        input_dir.mkdir(parents=True)
-        (input_dir / "AGENTS.md").write_text("Session rules", encoding="utf-8")
-        (input_dir / "SOUL.md").write_text("Session persona", encoding="utf-8")
-        (input_dir / "IGNORE.md").write_text("ignored", encoding="utf-8")
+        first_workspace = tmp_dir / "workspace-a"
+        second_workspace = tmp_dir / "workspace-b"
+        nested = first_workspace / "nested"
+        nested.mkdir(parents=True)
+        second_workspace.mkdir(parents=True)
+        (first_workspace / "AGENTS.md").write_text("Private rules", encoding="utf-8")
+        (first_workspace / "SOUL.md").write_text("Private persona", encoding="utf-8")
+        (nested / "AGENTS.md").write_text("nested should be ignored", encoding="utf-8")
+        (second_workspace / "AGENTS.md").write_text("other workspace ignored", encoding="utf-8")
 
-        docs = load_session_prompt_documents(input_dir)
+        docs = load_workspace_prompt_documents([first_workspace, second_workspace])
 
         assert [doc["name"] for doc in docs] == ["AGENTS.md", "SOUL.md"]
-        assert docs[0]["content"] == "Session rules"
-        assert docs[1]["content"] == "Session persona"
+        assert docs[0]["content"] == "Private rules"
+        assert docs[1]["content"] == "Private persona"
         assert docs[0]["path"].endswith("AGENTS.md")
         assert docs[1]["path"].endswith("SOUL.md")
     finally:

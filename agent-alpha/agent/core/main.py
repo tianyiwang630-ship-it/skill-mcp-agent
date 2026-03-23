@@ -22,8 +22,7 @@ def _generate_session_id() -> str:
 
 
 def create_cli_session(workspace_root: Path, session_id: str) -> tuple[Path, Path]:
-    paths = create_cli_session_paths(workspace_root=workspace_root, session_id=session_id)
-    return paths.session_root, paths.logs_dir
+    return create_cli_session_paths(workspace_root=workspace_root, session_id=session_id)
 
 
 def build_log_path(logs_dir: Path, session_id: str, started_at: datetime) -> Path:
@@ -38,7 +37,6 @@ def append_session_index(
     started_at: datetime,
     history,
     session_workspace: Path,
-    temp_dir: Path,
     log_path: Path,
 ):
     index_file = workspace_root / "sessions" / "index.md"
@@ -47,18 +45,17 @@ def append_session_index(
     user_turns = len([message for message in history if message["role"] == "user"])
     first_msg = next((m["content"][:100] for m in history if m["role"] == "user"), "")
     first_msg = first_msg.replace("\n", " ").replace("|", "/")
-    has_temp = temp_dir.exists() and any(temp_dir.iterdir())
 
     if not index_file.exists():
         header = "# Session Index\n\n"
-        header += "| Session ID | Started | User Turns | Temp Dir | Log File | First User Message |\n"
+        header += "| Session ID | Started | User Turns | Workspace | Log File | First User Message |\n"
         header += "|---|---|---:|---|---|---|\n"
         index_file.write_text(header, encoding="utf-8")
 
     time_str = started_at.strftime("%m-%d %H:%M")
-    temp_str = str(temp_dir.relative_to(workspace_root)).replace("\\", "/") if has_temp else "-"
+    workspace_str = str(session_workspace.relative_to(workspace_root)).replace("\\", "/")
     log_str = str(log_path.relative_to(workspace_root)).replace("\\", "/")
-    line = f"| {session_id} | {time_str} | {user_turns} | {temp_str} | {log_str} | {first_msg} |\n"
+    line = f"| {session_id} | {time_str} | {user_turns} | {workspace_str} | {log_str} | {first_msg} |\n"
     with open(index_file, "a", encoding="utf-8") as handle:
         handle.write(line)
 
@@ -95,7 +92,6 @@ def save_session_log(
             started_at=started_at,
             history=agent.history,
             session_workspace=session_workspace,
-            temp_dir=agent.temp_dir,
             log_path=log_path,
         )
     except Exception as exc:  # pragma: no cover - logging fallback
@@ -152,7 +148,7 @@ def run_single_agent_cli():
                 continue
 
             if user_input.lower() == "save":
-                save_path = agent.temp_dir / "agent_context.json"
+                save_path = agent.workspace_root / "agent_context.json"
                 agent.save_context(str(save_path))
                 continue
 

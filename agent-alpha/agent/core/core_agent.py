@@ -8,7 +8,7 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 try:
     import msvcrt
@@ -21,8 +21,7 @@ from agent.core.agent_loop import AgentLoop
 from agent.core.config import KEEP_RECENT_TURNS, MAX_CONTEXT_TOKENS, MAX_TOOL_RESULT_CHARS
 from agent.core.context_manager import ContextManager
 from agent.core.llm import LLMClient
-from agent.core.prompt_docs_loader import load_session_prompt_documents
-from agent.core.session_paths import AgentWorkspacePaths, ensure_agent_workspace
+from agent.core.prompt_docs_loader import load_workspace_prompt_documents
 from agent.core.skill_loader import SkillLoader
 from agent.core.system_prompt_builder import build_system_prompt
 from agent.core.tool_loader import ToolLoader
@@ -38,19 +37,20 @@ class Agent:
         self,
         max_turns: int = 5000,
         workspace_root: str | None = None,
+        workspaces: Sequence[str | Path] | None = None,
         logs_dir: str | None = None,
         task_id: str | None = None,
         llm_profile_name: str | None = None,
     ):
-        self.workspace_root = Path(workspace_root).resolve() if workspace_root else PROJECT_ROOT.resolve()
+        self.workspaces = self._normalize_workspaces(workspace_root, workspaces)
+        self.workspace_root = self.workspaces[0]
+        self.additional_workspaces = self.workspaces[1:]
         self.runtime_logs_dir = Path(logs_dir).resolve() if logs_dir else None
         self.task_id = task_id
         self.llm_profile_name = llm_profile_name
 
-        self.workspace_paths: AgentWorkspacePaths = ensure_agent_workspace(self.workspace_root)
-        self.input_dir = self.workspace_paths.input_dir
-        self.output_dir = self.workspace_paths.output_dir
-        self.temp_dir = self.workspace_paths.temp_dir
+        for workspace in self.workspaces:
+            workspace.mkdir(parents=True, exist_ok=True)
 
         self.llm = LLMClient.from_profile(llm_profile_name)
         self.skill_loader = SkillLoader(PROJECT_ROOT / "skills")
@@ -64,9 +64,9 @@ class Agent:
 
         fetch = self.tool_loader.tool_instances.get("fetch")
         if fetch:
-            fetch.temp_dir = self.temp_dir
+            fetch.temp_dir = self.workspace_root
 
-        self.prompt_documents = load_session_prompt_documents(self.input_dir)
+        self.prompt_documents = load_workspace_prompt_documents(self.workspaces)
         self.system_prompt = self._build_system_prompt()
 
         self.context_manager = ContextManager(
@@ -77,12 +77,25 @@ class Agent:
             keep_recent_turns=KEEP_RECENT_TURNS,
         )
 
+    def _normalize_workspaces(
+        self,
+        workspace_root: str | None,
+        workspaces: Sequence[str | Path] | None,
+    ) -> List[Path]:
+        if workspaces:
+            resolved = [Path(workspace).resolve() for workspace in workspaces]
+        else:
+            default_workspace = Path(workspace_root).resolve() if workspace_root else PROJECT_ROOT.resolve()
+            resolved = [default_workspace]
+
+        if not resolved:
+            raise ValueError("Agent requires at least one workspace")
+        return resolved
+
     def _build_system_prompt(self) -> str:
         return build_system_prompt(
-            workspace_root=self.workspace_root,
-            input_dir=self.input_dir,
-            output_dir=self.output_dir,
-            temp_dir=self.temp_dir,
+            private_workspace=self.workspace_root,
+            additional_workspaces=self.additional_workspaces,
             logs_dir=self.runtime_logs_dir,
             skills_dir=PROJECT_ROOT / "skills",
             mcp_servers_dir=PROJECT_ROOT / "mcp-servers",
@@ -141,6 +154,7 @@ class Agent:
         return {
             "system_prompt": self.system_prompt,
             "available_tools": len(self.tools),
+            "workspaces": [str(path) for path in self.workspaces],
             "history": self.history,
         }
 

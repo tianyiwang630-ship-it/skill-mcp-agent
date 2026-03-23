@@ -11,20 +11,19 @@ from agent.core.system_prompt_builder import build_system_prompt
 
 
 def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
-    workspace_root = Path("D:/demo/workspace/session-abc123")
-    input_dir = workspace_root / "input"
-    output_dir = workspace_root / "output"
-    temp_dir = workspace_root / "temp"
+    private_workspace = Path("D:/demo/workspaces/agent-a")
+    additional_workspaces = [
+        Path("D:/demo/workspaces/project-shared"),
+        Path("D:/demo/workspaces/peer-agent"),
+    ]
     logs_dir = Path("D:/demo/workspace/logs")
     skills_dir = Path("D:/demo/project/skills")
     mcp_servers_dir = Path("D:/demo/project/mcp-servers")
     mcp_registry_path = mcp_servers_dir / "registry.json"
 
     prompt = build_system_prompt(
-        workspace_root=workspace_root,
-        input_dir=input_dir,
-        output_dir=output_dir,
-        temp_dir=temp_dir,
+        private_workspace=private_workspace,
+        additional_workspaces=additional_workspaces,
         logs_dir=logs_dir,
         skills_dir=skills_dir,
         mcp_servers_dir=mcp_servers_dir,
@@ -41,27 +40,31 @@ def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
         prompt_documents=[
             {
                 "name": "AGENTS.md",
-                "path": str(input_dir / "AGENTS.md"),
+                "path": str(private_workspace / "AGENTS.md"),
                 "content": "Follow the session rules.",
             },
             {
                 "name": "SOUL.md",
-                "path": str(input_dir / "SOUL.md"),
+                "path": str(private_workspace / "SOUL.md"),
                 "content": "You are a calm research agent.",
             },
         ],
     )
 
     assert "task-1" in prompt
-    assert "## Working Directories" in prompt
+    assert "## Private Workspace" in prompt
+    assert "## Additional Workspaces" in prompt
     assert "## System Resource Paths" in prompt
     assert "## Runtime Records" in prompt
-    assert str(workspace_root) in prompt
+    assert str(private_workspace) in prompt
+    assert str(additional_workspaces[0]) in prompt
+    assert str(additional_workspaces[1]) in prompt
     assert str(logs_dir) in prompt
     assert str(skills_dir) in prompt
     assert str(mcp_servers_dir) in prompt
     assert str(mcp_registry_path) in prompt
-    assert "Write final deliverables to the output directory" in prompt
+    assert "AGENTS.md and SOUL.md are only loaded from the private workspace root" in prompt
+    assert "If multiple workspaces are provided, their roles should be interpreted from AGENTS.md" in prompt
     assert "System resource paths are primarily for reading and reference" in prompt
     assert "Logs are runtime records" in prompt
     assert "Skills available:" in prompt
