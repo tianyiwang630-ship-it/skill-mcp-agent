@@ -1,0 +1,26 @@
+{
+  "mode": "headless",
+  "browser": {
+    "browserName": "chromium",
+    "isolated": true,
+    "launchOptions": {
+      "channel": "chromium",
+      "headless": true
+    },
+    "contextOptions": {
+      "viewport": null,
+      "storageState": "state/storage/shared.json"
+    }
+  },
+  "console": {
+    "level": "info"
+  },
+  "snapshot": {
+    "mode": "incremental"
+  },
+  "sync": {
+    "enabled": false,
+    "trigger": "none",
+    "storageStatePath": "state/storage/shared.json"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "mode": "headed",
+  "browser": {
+    "browserName": "chromium",
+    "isolated": false,
+    "userDataDir": "state/profiles/default",
+    "launchOptions": {
+      "channel": "chromium",
+      "headless": false
+    },
+    "contextOptions": {
+      "viewport": null
+    }
+  },
+  "console": {
+    "level": "info"
+  },
+  "snapshot": {
+    "mode": "incremental"
+  },
+  "sync": {
+    "enabled": true,
+    "trigger": "before_close",
+    "storageStatePath": "state/storage/shared.json"
+  }
+}

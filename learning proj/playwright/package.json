@@ -1,0 +1,15 @@
+{
+  "name": "playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Playwright MCP wrapper using the official config file flow.",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "scripts": {
+    "refresh:official": "npm install --save-exact @playwright/mcp@latest",
+    "check:cli": "node node_modules/@playwright/mcp/cli.js --help"
+  },
+  "dependencies": {
+    "@playwright/mcp": "0.0.68"
+  }
+}
