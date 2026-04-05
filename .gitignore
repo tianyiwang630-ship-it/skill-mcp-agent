@@ -49,6 +49,7 @@ workspace/*.py
 input files/
 output files/
 temp/
+learning proj/
 
 # MCP 子模块
 mcp-servers/**/node_modules/
@@ -63,6 +64,7 @@ logs/
 # 环境变量
 .env
 .env.local
+调试.txt
 
 # 系统文件
 .DS_Store

@@ -35,26 +35,26 @@ def test_playwright_mcp_entry_uses_local_server_wrapper():
     assert config["args"] == ["server.js", "--config", "playwright.headed.config.json"]
 
 
-def test_headed_config_uses_temp_profile_and_syncs_before_close():
+def test_headed_config_autosaves_and_syncs_before_close():
     config = _read_json(PLAYWRIGHT_DIR / "playwright.headed.config.json")
 
     assert config["mode"] == "headed"
     assert config["browser"]["isolated"] is False
     assert config["browser"]["launchOptions"]["headless"] is False
-    assert config["browser"]["userDataDir"] == "temp/profiles/default"
+    assert config["browser"]["userDataDir"] == "state/profiles/default"
     assert config["sync"]["enabled"] is True
     assert config["sync"]["trigger"] == "auto_and_before_close"
     assert config["sync"]["intervalMs"] == 2000
     assert config["sync"]["storageStatePath"] == "state/storage/shared.json"
 
 
-def test_server_wrapper_autosaves_storage_state_and_cleans_temp_profile():
+def test_server_wrapper_autosaves_storage_state_and_syncs_before_close():
     wrapper_source = (PLAYWRIGHT_DIR / "server.js").read_text(encoding="utf-8")
 
-    assert "fs.rmSync(userDataDir, { recursive: true, force: true });" in wrapper_source
     assert "setInterval" in wrapper_source
-    assert "await saveStorageState(\"interval\")" in wrapper_source
-    assert "await browserContext.storageState({ path: sharedStatePath });" in wrapper_source
+    assert 'void saveStorageState("interval");' in wrapper_source
+    assert 'await saveStorageState("before_close");' in wrapper_source
+    assert "logStorageStateError" in wrapper_source
 
 
 def test_headless_config_uses_shared_storage_state():

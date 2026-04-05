@@ -28,7 +28,8 @@ playwright/
 - `server.js`
   本地 MCP wrapper。继续使用官方 Playwright MCP 工具集，只额外负责：
   - 选择 headed / headless 配置
-  - 在有头模式关闭前同步导出共享 `storage-state`
+  - 在有头模式运行中定时同步导出共享 `storage-state`
+  - 在有头模式关闭前再补一次同步导出共享 `storage-state`
 
 - `state/profiles/default/`
   持久浏览器 profile 目录。
@@ -36,8 +37,21 @@ playwright/
 
 - `state/storage/shared.json`
   共享登录态文件。
-  由有头模式在关闭浏览器前自动导出。
+  由有头模式运行中定时自动导出，并在关闭前再补一次导出。
   以后多 agent、无头模式主要读取这份文件。
+
+## 如何手动清理历史记录
+
+如果想手动清掉 Playwright 有头模式留下的浏览器历史记录、缓存和本地 profile，可以这样做：
+
+1. 先关闭正在运行的 Playwright 浏览器。
+2. 删除 `agent-alpha/mcp-servers/playwright/state/profiles/default/` 这个目录。
+3. 下次再启动有头模式时，系统会自动重建一个新的干净 profile。
+
+说明：
+- 这样会清掉浏览器历史记录、缓存和当前 profile 里的本地状态。
+- `state/storage/shared.json` 不会自动删除，所以共享登录态默认还在。
+- 如果你连共享登录态也想一起清掉，再手动删除 `state/storage/shared.json`。
 
 ## 两种模式
 
@@ -49,7 +63,8 @@ playwright/
 - `headless: false`
 - 使用持久 profile
 - 适合人工登录、验证码、风控确认
-- 关闭浏览器前自动把当前完整 `storage-state` 写到 `state/storage/shared.json`
+- 运行中每隔一段时间自动把当前 `storage-state` 写到 `state/storage/shared.json`
+- 关闭浏览器前会再补一次保存，尽量避免手动关窗口时丢失登录态
 
 ### 2. Headless
 

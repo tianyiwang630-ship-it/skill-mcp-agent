@@ -59,7 +59,7 @@ function printHelp() {
       "",
       "This wrapper keeps the official Playwright MCP toolset",
       "and adds local headed/headless config selection plus",
-      "storage-state sync before close for headed mode.",
+      "periodic and before-close storage-state sync for headed mode.",
       "",
     ].join("\n"),
   );
@@ -125,12 +125,21 @@ function ensureParentDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
+function logStorageStateError(reason, error) {
+  process.stderr.write(
+    `[playwright-wrapper] failed to save storage state (${reason}): ${error?.stack || String(error)}\n`,
+  );
+}
+
 
 async function createManagedContextFactory(resolvedConfig, appConfig, baseDir) {
   const browserType = resolveBrowserType(resolvedConfig.browser.browserName);
   const syncEnabled = appConfig.mode === "headed" && appConfig.sync?.enabled === true;
   const syncTrigger = appConfig.sync?.trigger;
   const sharedStatePath = resolveMaybeRelative(baseDir, appConfig.sync?.storageStatePath);
+  const autoSaveIntervalMs = Number(appConfig.sync?.intervalMs) > 0 ? Number(appConfig.sync.intervalMs) : 2000;
+  const autoSaveTriggers = new Set(["auto", "auto_and_before_close"]);
+  const beforeCloseTriggers = new Set(["before_close", "auto_and_before_close"]);
 
   return {
     name: "persistent-or-shared",
@@ -149,12 +158,35 @@ async function createManagedContextFactory(resolvedConfig, appConfig, baseDir) {
           assistantMode: true,
         });
 
+        let syncTimer;
+
+        const saveStorageState = async (reason) => {
+          if (!sharedStatePath) {
+            return;
+          }
+          try {
+            ensureParentDir(sharedStatePath);
+            await browserContext.storageState({ path: sharedStatePath });
+          } catch (error) {
+            logStorageStateError(reason, error);
+          }
+        };
+
+        if (syncEnabled && autoSaveTriggers.has(syncTrigger) && sharedStatePath) {
+          syncTimer = setInterval(() => {
+            void saveStorageState("interval");
+          }, autoSaveIntervalMs);
+          syncTimer.unref?.();
+        }
+
         return {
           browserContext,
           close: async () => {
-            if (syncEnabled && syncTrigger === "before_close" && sharedStatePath) {
-              ensureParentDir(sharedStatePath);
-              await browserContext.storageState({ path: sharedStatePath });
+            if (syncTimer) {
+              clearInterval(syncTimer);
+            }
+            if (syncEnabled && beforeCloseTriggers.has(syncTrigger) && sharedStatePath) {
+              await saveStorageState("before_close");
             }
             await browserContext.close();
           },

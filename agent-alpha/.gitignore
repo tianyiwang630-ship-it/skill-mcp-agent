@@ -56,8 +56,10 @@ mcp-servers/**/.venv/
 mcp-servers/**/.auto-config.json
 mcp-servers/**/__pycache__/
 
-# Playwright 持久浏览器 profile 只保留本地，不进 git
+# Playwright 运行时状态只保留本地，不进 git
 mcp-servers/playwright/state/profiles/
+mcp-servers/playwright/state/storage/*
+!mcp-servers/playwright/state/storage/.gitkeep
 mcp-servers/playwright/temp/
 
 # 日志

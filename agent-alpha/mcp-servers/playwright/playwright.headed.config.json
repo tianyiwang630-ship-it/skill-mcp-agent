@@ -20,7 +20,8 @@
   },
   "sync": {
     "enabled": true,
-    "trigger": "before_close",
+    "trigger": "auto_and_before_close",
+    "intervalMs": 2000,
     "storageStatePath": "state/storage/shared.json"
   }
 }
