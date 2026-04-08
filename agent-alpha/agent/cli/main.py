@@ -8,7 +8,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
+from agent.core.runtime_types import RuntimeRequest
 from agent.core.session_paths import create_cli_session_paths
 
 
@@ -62,7 +63,7 @@ def append_session_index(
 
 def save_session_log(
     *,
-    agent: Agent,
+    agent: AgentRuntime,
     session_id: str,
     started_at: datetime,
     workspace_root: Path,
@@ -109,7 +110,7 @@ def run_single_agent_cli():
     session_workspace, logs_dir = create_cli_session(workspace_root, session_id)
     log_path = build_log_path(logs_dir, session_id, started_at)
 
-    agent = Agent(workspace_root=str(session_workspace), logs_dir=str(logs_dir))
+    agent = AgentRuntime(workspace_root=str(session_workspace), logs_dir=str(logs_dir))
 
     print("\nCommands:")
     print("  - quit / exit: save the session log and leave")
@@ -167,8 +168,8 @@ def run_single_agent_cli():
                 _handle_admin(agent)
                 continue
 
-            response = agent.run(user_input)
-            print(f"\nAgent: {response}\n")
+            response = agent.handle(RuntimeRequest(content=user_input, session_id=session_id))
+            print(f"\nAgent: {response.content}\n")
         except KeyboardInterrupt:
             print("\n\nInterrupted by Ctrl+C.")
             save_session_log(
@@ -179,12 +180,7 @@ def run_single_agent_cli():
                 session_workspace=session_workspace,
                 log_path=log_path,
             )
-            mcp_mgr = agent.tool_loader.tool_executors.get("_mcp_manager")
-            if mcp_mgr:
-                try:
-                    mcp_mgr.close_all()
-                except Exception:
-                    pass
+            agent.close()
             break
         except Exception as exc:
             print(f"\nError: {exc}")
@@ -194,7 +190,7 @@ def run_single_agent_cli():
             print()
 
 
-def _handle_admin(agent: Agent):
+def _handle_admin(agent: AgentRuntime):
     permission_manager = agent.tool_loader.permission_manager
     if permission_manager is None:
         print("\nPermissions are disabled.\n")

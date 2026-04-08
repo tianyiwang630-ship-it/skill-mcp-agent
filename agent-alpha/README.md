@@ -148,10 +148,10 @@ description: 简要描述这个技能的功能和使用场景
 ### 5. 运行 Agent
 
 ```python
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
 # 初始化 Agent
-agent = Agent()
+agent = AgentRuntime()
 
 # 运行对话
 response = agent.run("帮我搜索小红书上的化妆品推荐")
@@ -329,9 +329,9 @@ skills-mcp-beta/
 ### 基础对话
 
 ```python
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
-agent = Agent()
+agent = AgentRuntime()
 
 # 简单查询
 response = agent.run("今天天气怎么样？")
@@ -362,9 +362,9 @@ response = agent.run("修改 document.docx 的第二段")
 
 ```python
 from pathlib import Path
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
-agent = Agent(
+agent = AgentRuntime(
     workspace_root="/path/to/workspace",
     max_turns=1000,
     task_id="task-123"
@@ -533,10 +533,10 @@ Detailed usage instructions...
 ### 5. Run Agent
 
 ```python
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
 # Initialize Agent
-agent = Agent()
+agent = AgentRuntime()
 
 # Run conversation
 response = agent.run("Help me search for cosmetic recommendations on Xiaohongshu")
@@ -714,9 +714,9 @@ skills-mcp-beta/
 ### Basic Conversation
 
 ```python
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
-agent = Agent()
+agent = AgentRuntime()
 
 # Simple query
 response = agent.run("What's the weather today?")
@@ -747,9 +747,9 @@ response = agent.run("Modify the second paragraph of document.docx")
 
 ```python
 from pathlib import Path
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
-agent = Agent(
+agent = AgentRuntime(
     workspace_root="/path/to/workspace",
     max_turns=1000,
     task_id="task-123"

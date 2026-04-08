@@ -9,10 +9,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from tests.conftest import cleanup_test_dir, make_test_dir
-from agent.core.core_agent import Agent
+from agent.core.agent_runtime import AgentRuntime
 
 
-def test_agent_loads_prompt_docs_only_from_first_workspace_root():
+def test_agent_runtime_loads_prompt_docs_only_from_first_workspace_root():
     tmp_dir = make_test_dir("core-agent")
     try:
         first_workspace = tmp_dir / "workspace-a"
@@ -23,11 +23,11 @@ def test_agent_loads_prompt_docs_only_from_first_workspace_root():
         (first_workspace / "SOUL.md").write_text("You are a patient planner.", encoding="utf-8")
         (second_workspace / "AGENTS.md").write_text("This should not be loaded.", encoding="utf-8")
 
-        with patch("agent.core.core_agent.ToolLoader.load_all", lambda self: []), patch(
-            "agent.core.core_agent.LLMClient.from_profile",
+        with patch("agent.core.agent_runtime.ToolLoader.load_all", lambda self: []), patch(
+            "agent.core.agent_runtime.LLMClient.from_profile",
             side_effect=lambda profile_name=None: object(),
         ):
-            agent = Agent(
+            agent = AgentRuntime(
                 workspaces=[str(first_workspace), str(second_workspace)],
                 logs_dir=str(tmp_dir / "logs"),
             )
@@ -41,20 +41,20 @@ def test_agent_loads_prompt_docs_only_from_first_workspace_root():
         cleanup_test_dir(tmp_dir)
 
 
-def test_agent_exposes_log_payload_without_owning_log_files():
+def test_agent_runtime_exposes_log_payload_without_owning_log_files():
     tmp_dir = make_test_dir("core-agent-log")
     try:
         workspace_root = tmp_dir / "workspace"
         workspace_root.mkdir(parents=True)
 
         with patch(
-            "agent.core.core_agent.ToolLoader.load_all",
+            "agent.core.agent_runtime.ToolLoader.load_all",
             lambda self: [],
         ), patch(
-            "agent.core.core_agent.LLMClient.from_profile",
+            "agent.core.agent_runtime.LLMClient.from_profile",
             side_effect=lambda profile_name=None: object(),
         ):
-            agent = Agent(workspace_root=str(workspace_root))
+            agent = AgentRuntime(workspace_root=str(workspace_root))
 
         agent.history = [{"role": "user", "content": "hello"}]
         payload = agent.get_session_log_data()
@@ -70,7 +70,7 @@ def test_agent_exposes_log_payload_without_owning_log_files():
         cleanup_test_dir(tmp_dir)
 
 
-def test_agent_uses_selected_llm_profile():
+def test_agent_runtime_uses_selected_llm_profile():
     tmp_dir = make_test_dir("core-agent-profile")
     try:
         workspace_root = tmp_dir / "workspace"
@@ -84,15 +84,49 @@ def test_agent_uses_selected_llm_profile():
             captured["profile_name"] = profile_name
             return DummyLLM()
 
-        with patch("agent.core.core_agent.ToolLoader.load_all",
+        with patch("agent.core.agent_runtime.ToolLoader.load_all",
             lambda self: [],
         ), patch(
-            "agent.core.core_agent.LLMClient.from_profile",
+            "agent.core.agent_runtime.LLMClient.from_profile",
             side_effect=fake_from_profile,
         ):
-            agent = Agent(workspace_root=str(workspace_root), llm_profile_name="kimi-fast")
+            agent = AgentRuntime(workspace_root=str(workspace_root), llm_profile_name="kimi-fast")
 
         assert captured["profile_name"] == "kimi-fast"
         assert isinstance(agent.llm, DummyLLM)
+    finally:
+        cleanup_test_dir(tmp_dir)
+
+
+def test_agent_runtime_handle_delegates_to_agent_loop():
+    tmp_dir = make_test_dir("core-agent-handle")
+    try:
+        workspace_root = tmp_dir / "workspace"
+        workspace_root.mkdir(parents=True)
+
+        class DummyLoop:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+                self.history = kwargs["history"]
+
+            def run(self, user_input):
+                self.history.append({"role": "user", "content": user_input})
+                self.history.append({"role": "assistant", "content": f"handled:{user_input}"})
+                return f"handled:{user_input}"
+
+        with patch("agent.core.agent_runtime.ToolLoader.load_all", lambda self: []), patch(
+            "agent.core.agent_runtime.LLMClient.from_profile",
+            side_effect=lambda profile_name=None: object(),
+        ), patch(
+            "agent.core.agent_runtime.AgentLoop",
+            DummyLoop,
+        ):
+            agent = AgentRuntime(workspace_root=str(workspace_root))
+            response = agent.handle("hello runtime")
+
+        assert response.content == "handled:hello runtime"
+        assert response.session_id == "runtime:local"
+        assert agent.history[0] == {"role": "user", "content": "hello runtime"}
+        assert agent.history[-1] == {"role": "assistant", "content": "handled:hello runtime"}
     finally:
         cleanup_test_dir(tmp_dir)

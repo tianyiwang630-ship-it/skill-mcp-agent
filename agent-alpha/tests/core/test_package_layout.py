@@ -1,3 +1,4 @@
+import importlib
 from pathlib import Path
 import sys
 
@@ -24,11 +25,35 @@ def test_cli_package_exposes_main_helpers():
     assert callable(append_session_index)
 
 
+def test_cli_package_import_does_not_preload_main_module():
+    sys.modules.pop("agent.cli.main", None)
+    sys.modules.pop("agent.cli", None)
+
+    importlib.import_module("agent.cli")
+
+    assert "agent.cli.main" not in sys.modules
+
+
 def test_legacy_core_shims_are_removed():
     legacy_files = [
         PROJECT_ROOT / "agent" / "core" / "llm.py",
         PROJECT_ROOT / "agent" / "core" / "llm_profiles.py",
         PROJECT_ROOT / "agent" / "core" / "main.py",
+        PROJECT_ROOT / "agent" / "core" / "core_agent.py",
     ]
 
     assert legacy_files == [path for path in legacy_files if not path.exists()]
+
+
+def test_runtime_layout_files_exist():
+    expected_files = [
+        PROJECT_ROOT / "agent" / "core" / "agent_runtime.py",
+        PROJECT_ROOT / "agent" / "core" / "role_config.py",
+        PROJECT_ROOT / "agent" / "core" / "runtime_types.py",
+        PROJECT_ROOT / "agent" / "runtime" / "bus" / "events.py",
+        PROJECT_ROOT / "agent" / "runtime" / "bus" / "queue.py",
+        PROJECT_ROOT / "agent" / "runtime" / "cron" / "service.py",
+        PROJECT_ROOT / "agent" / "runtime" / "cron" / "types.py",
+    ]
+
+    assert expected_files == [path for path in expected_files if path.exists()]

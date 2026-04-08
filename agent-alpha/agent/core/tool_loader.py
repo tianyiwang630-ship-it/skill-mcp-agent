@@ -10,18 +10,33 @@ Phase 1 keeps three tool sources:
 from __future__ import annotations
 
 import importlib
+import copy
 import json
 from pathlib import Path
 from typing import Any, Dict, List
 
 from agent.core.bm25 import BM25Index
 from agent.core.config import BASH_TOOL_TIMEOUT, DEFAULT_MCP_CATEGORY
+from agent.core.role_config import RoleConfig
 from agent.core.sandbox_guard import SandboxGuard
 from agent.core.skill_loader import SkillLoader
 
 
 class ToolLoader:
     """Load tool definitions and dispatch tool execution."""
+
+    TOOL_GROUPS = {
+        "bash": "shell",
+        "read": "filesystem",
+        "write": "filesystem",
+        "append": "filesystem",
+        "edit": "filesystem",
+        "glob": "filesystem",
+        "grep": "filesystem",
+        "fetch": "network",
+        "load_skill": "skill",
+        "tool_search": "meta",
+    }
 
     BUILTIN_TOOLS = [
         ("agent.tools.bash_tool", "BashTool", {"timeout": BASH_TOOL_TIMEOUT}),
@@ -55,6 +70,9 @@ class ToolLoader:
         self.tools: List[Dict[str, Any]] = []
         self.tool_executors: Dict[str, Any] = {}
         self.tool_instances: Dict[str, Any] = {}
+        self._catalog_tools: List[Dict[str, Any]] = []
+        self._catalog_executors: Dict[str, Any] = {}
+        self._catalog_instances: Dict[str, Any] = {}
 
         self._searchable_servers: Dict[str, Dict[str, Any]] = {}
         self._bm25_index: BM25Index | None = None
@@ -81,8 +99,75 @@ class ToolLoader:
         self._load_mcp_tools()
         self._load_skills()
         self._load_builtin_tools()
+        self._snapshot_catalog()
         print(f"\nOK loaded {len(self.tools)} tools")
         return self.tools
+
+    def _snapshot_catalog(self) -> None:
+        self._catalog_tools = copy.deepcopy(self.tools)
+        self._catalog_executors = dict(self.tool_executors)
+        self._catalog_instances = dict(self.tool_instances)
+
+    def _restore_catalog(self) -> None:
+        self.tools = copy.deepcopy(self._catalog_tools)
+        self.tool_executors = dict(self._catalog_executors)
+        self.tool_instances = dict(self._catalog_instances)
+
+    def _tool_group_for(self, tool_name: str) -> str:
+        if tool_name.startswith("mcp__"):
+            return "mcp"
+        return self.TOOL_GROUPS.get(tool_name, "custom")
+
+    def resolve_tools(self, role_config: RoleConfig | None = None) -> List[Dict[str, Any]]:
+        """Filter loaded tools for the current runtime role."""
+        if not self._catalog_tools:
+            self.load_all()
+
+        self._restore_catalog()
+        role = role_config or RoleConfig()
+        enabled_groups = set(role.enabled_tool_groups)
+        allowed_tools = set(role.allowed_tools)
+        denied_tools = set(role.denied_tools)
+
+        if not enabled_groups and not allowed_tools and not denied_tools:
+            return self.tools
+
+        def is_allowed(name: str) -> bool:
+            if name in denied_tools:
+                return False
+            if not enabled_groups and not allowed_tools:
+                return True
+            return name in allowed_tools or self._tool_group_for(name) in enabled_groups
+
+        selected_defs = []
+        selected_names = set()
+        for tool in self.tools:
+            name = tool.get("function", {}).get("name", "")
+            if is_allowed(name):
+                selected_defs.append(tool)
+                selected_names.add(name)
+
+        selected_executors = {
+            name: executor
+            for name, executor in self.tool_executors.items()
+            if name in selected_names or (name == "_mcp_manager" and any(t.startswith("mcp__") or t == "tool_search" for t in selected_names))
+        }
+        selected_instances = {
+            name: instance
+            for name, instance in self.tool_instances.items()
+            if name in selected_names
+        }
+
+        self.tools = selected_defs
+        self.tool_executors = selected_executors
+        self.tool_instances = selected_instances
+        return self.tools
+
+    def configure_runtime(self, workspace_root: Path) -> None:
+        """Bind workspace-aware tool instances to the active runtime."""
+        for tool in self.tool_instances.values():
+            if hasattr(tool, "temp_dir"):
+                tool.temp_dir = workspace_root
 
     def _load_mcp_tools(self) -> None:
         """Load MCP tools and defer searchable servers behind tool_search."""

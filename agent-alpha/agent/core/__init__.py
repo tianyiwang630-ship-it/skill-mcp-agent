@@ -1,3 +1,5 @@
 """Core package for agent orchestration."""
 
-__all__: list[str] = []
+from agent.core.agent_runtime import AgentRuntime
+
+__all__ = ["AgentRuntime"]
