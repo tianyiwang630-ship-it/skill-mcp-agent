@@ -8,19 +8,27 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from tests.conftest import cleanup_test_dir, make_test_dir
-from agent.core.session_paths import create_cli_session_paths
+from agent.core.session_paths import create_cli_session_paths, get_default_workspace_root
 
 
-def test_create_cli_session_paths_creates_session_workspace_and_logs():
+def test_create_cli_session_paths_creates_session_log_directories():
     tmp_dir = make_test_dir("cli-session-paths")
     try:
-        workspace_root = tmp_dir / "workspace"
+        project_root = tmp_dir / "agent-alpha"
 
-        session_root, logs_dir = create_cli_session_paths(workspace_root=workspace_root, session_id="abc123")
+        sessions_dir, logs_dir = create_cli_session_paths(project_root=project_root)
 
-        assert session_root == (workspace_root / "sessions" / "abc123").resolve()
-        assert logs_dir == (workspace_root / "logs").resolve()
-        assert session_root.exists()
+        assert sessions_dir == (project_root / "session-log" / "sessions").resolve()
+        assert logs_dir == (project_root / "session-log" / "logs").resolve()
+        assert sessions_dir.exists()
         assert logs_dir.exists()
     finally:
         cleanup_test_dir(tmp_dir)
+
+
+def test_get_default_workspace_root_points_to_workspace_directory():
+    project_root = Path("D:/demo/agent-alpha")
+
+    workspace_root = get_default_workspace_root(project_root)
+
+    assert workspace_root == (project_root / "workspace").resolve()

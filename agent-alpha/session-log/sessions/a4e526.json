@@ -1,0 +1,19 @@
+{
+  "session_id": "a4e526",
+  "kind": "interactive",
+  "workspaces": [
+    "D:\\files\\demo\\0312-newagent\\agent-alpha\\workspace"
+  ],
+  "history": [
+    {
+      "role": "user",
+      "content": "/worksspace"
+    }
+  ],
+  "metadata": {
+    "project_root": "D:\\files\\demo\\0312-newagent\\agent-alpha"
+  },
+  "events": [],
+  "created_at": "2026-04-08T16:56:50.607964",
+  "updated_at": "2026-04-08T16:57:02.575233"
+}
