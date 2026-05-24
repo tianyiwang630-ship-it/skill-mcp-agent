@@ -38,8 +38,7 @@ def _build_prompt_documents_section(prompt_documents: Optional[List[Dict[str, st
 
 def build_system_prompt(
     *,
-    private_workspace: Path,
-    additional_workspaces: Optional[List[Path]] = None,
+    workspace_root: Path,
     logs_dir: Path | None,
     skills_dir: Path,
     mcp_servers_dir: Path,
@@ -53,18 +52,12 @@ def build_system_prompt(
     skills_section = _build_skill_lines(skill_summaries)
     prompt_docs_section = _build_prompt_documents_section(prompt_documents)
     logs_line = str(logs_dir) if logs_dir else "(not provided by runner)"
-    additional_workspace_lines = "\n".join(
-        f"- {path}" for path in (additional_workspaces or [])
-    ) or "(none)"
 
     return f"""You are an agent running inside agent-alpha.
 
-## Private Workspace
+## Workspace
 {task_line}
-Primary workspace: {private_workspace}
-
-## Additional Workspaces
-{additional_workspace_lines}
+Workspace root: {workspace_root}
 
 ## System Resource Paths
 Skills directory: {skills_dir}
@@ -75,11 +68,10 @@ MCP registry: {mcp_registry_path}
 Logs directory: {logs_line}
 
 ## Workspace Rules
-- AGENTS.md and SOUL.md are only loaded from the private workspace root.
+- AGENTS.md and SOUL.md are only loaded from the workspace root.
 - Do not scan nested folders for AGENTS.md or SOUL.md.
-- The private workspace is this agent's dedicated workspace. It may contain persona docs, private reference materials, and active work files.
-- Additional workspaces may also contain files that this agent needs to read or modify.
-- If multiple workspaces are provided, their roles should be interpreted from AGENTS.md.
+- This workspace is the agent instance's dedicated workspace. It may contain persona docs, private reference materials, and active work files.
+- The user may reference other folders by explicit paths in the conversation.
 - Skill bodies are loaded on demand with `load_skill`; do not assume a skill's full content before loading it.
 - System resource paths are primarily for reading and reference. Modify `skills` or `mcp-servers` only when the task explicitly requires maintaining those resources.
 - Update the MCP registry only when MCP registration or categorization truly needs to change.

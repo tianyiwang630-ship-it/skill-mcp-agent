@@ -15,7 +15,7 @@ def test_tool_loader_denies_file_operation_outside_allowed_roots():
     loader = ToolLoader(
         project_root=Path("D:/demo/agent-alpha"),
         enable_permissions=False,
-        workspaces=[Path("D:/demo/agent-alpha/sessions/abc123")],
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
     )
     loader.tool_executors["write"] = lambda **kwargs: {"success": True, "details": kwargs}
 
@@ -29,7 +29,7 @@ def test_tool_loader_asks_user_for_project_write_and_allows_once():
     loader = ToolLoader(
         project_root=Path("D:/demo/agent-alpha"),
         enable_permissions=True,
-        workspaces=[Path("D:/demo/agent-alpha/sessions/abc123")],
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
     )
     loader.tool_executors["write"] = lambda **kwargs: {"success": True, "details": kwargs}
 
@@ -44,7 +44,7 @@ def test_tool_loader_returns_retry_context_when_user_supplies_extra_instruction(
     loader = ToolLoader(
         project_root=Path("D:/demo/agent-alpha"),
         enable_permissions=True,
-        workspaces=[Path("D:/demo/agent-alpha/sessions/abc123")],
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
     )
 
     with patch.object(

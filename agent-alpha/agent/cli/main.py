@@ -42,7 +42,7 @@ def append_session_index(
     session_id: str,
     started_at: datetime,
     history,
-    workspaces: list[Path],
+    workspace: Path,
     log_path: Path,
 ):
     index_file = sessions_dir / "index.md"
@@ -54,7 +54,7 @@ def append_session_index(
 
     if not index_file.exists():
         header = "# Session Index\n\n"
-        header += "| Session ID | Started | User Turns | Workspaces | Log File | First User Message |\n"
+        header += "| Session ID | Started | User Turns | Workspace | Log File | First User Message |\n"
         header += "|---|---|---:|---|---|---|\n"
         index_file.write_text(header, encoding="utf-8")
 
@@ -67,10 +67,7 @@ def append_session_index(
         except ValueError:
             return str(path).replace("\\", "/")
 
-    workspace_str = "<br>".join(
-        _display_path(workspace)
-        for workspace in workspaces
-    )
+    workspace_str = _display_path(workspace)
     log_str = _display_path(log_path)
     line = f"| {session_id} | {time_str} | {user_turns} | {workspace_str} | {log_str} | {first_msg} |\n"
     with open(index_file, "a", encoding="utf-8") as handle:
@@ -83,7 +80,7 @@ def save_session_log(
     session_id: str,
     started_at: datetime,
     sessions_dir: Path,
-    workspaces: list[Path],
+    workspace: Path,
     log_path: Path,
 ):
     if not agent.history:
@@ -108,7 +105,7 @@ def save_session_log(
             session_id=session_id,
             started_at=started_at,
             history=agent.history,
-            workspaces=workspaces,
+            workspace=workspace,
             log_path=log_path,
         )
     except Exception as exc:  # pragma: no cover - logging fallback
@@ -116,12 +113,12 @@ def save_session_log(
 
 
 def _create_runtime(
-    workspaces: list[Path],
+    workspace: Path,
     logs_dir: Path,
     history: list[dict] | None = None,
     permission_mode: str | None = None,
 ) -> AgentRuntime:
-    agent = AgentRuntime(workspaces=[str(path) for path in workspaces], logs_dir=str(logs_dir))
+    agent = AgentRuntime(workspace_root=str(workspace), logs_dir=str(logs_dir))
     agent.history = [dict(message) for message in (history or [])]
     if permission_mode and agent.tool_loader.permission_manager is not None:
         agent.tool_loader.permission_manager.set_mode(permission_mode)
@@ -133,14 +130,14 @@ def _save_session_snapshot(
     store: SessionStore,
     session_id: str,
     agent: AgentRuntime,
-    workspaces: list[Path],
+    workspace: Path,
     created_at: datetime,
     metadata: dict | None = None,
 ) -> SessionRecord:
     record = SessionRecord(
         session_id=session_id,
         kind=SessionKind.INTERACTIVE,
-        workspaces=[str(path) for path in workspaces],
+        workspace=str(workspace),
         history=[dict(message) for message in agent.history],
         metadata=metadata or {},
         created_at=created_at.isoformat(),
@@ -151,9 +148,9 @@ def _save_session_snapshot(
 
 def _format_session_option(index: int, record: SessionRecord) -> str:
     updated = record.updated_at.replace("T", " ")[:16]
-    primary_workspace = record.workspaces[0] if record.workspaces else "(no workspace)"
+    workspace = record.workspace or "(no workspace)"
     title = record.title or "(empty session)"
-    return f"  [{index}] {record.session_id} | {updated} | {primary_workspace} | {title}"
+    return f"  [{index}] {record.session_id} | {updated} | {workspace} | {title}"
 
 
 def _restore_session_interactive(store: SessionStore) -> SessionRecord | None:
@@ -185,20 +182,17 @@ def _restore_session_interactive(store: SessionStore) -> SessionRecord | None:
     return store.load(sessions[selected - 1].session_id)
 
 
-def _print_current_workspaces(workspaces: list[Path]) -> None:
-    print("\nCurrent workspaces:")
-    for index, workspace in enumerate(workspaces, start=1):
-        label = "primary" if index == 1 else f"extra-{index - 1}"
-        print(f"  [{index}] {label}: {workspace}")
+def _print_current_workspace(workspace: Path) -> None:
+    print("\nCurrent workspace:")
+    print(f"  {workspace}")
     print()
 
 
-def _parse_workspace_args(raw: str) -> list[Path]:
+def _parse_workspace_arg(raw: str) -> Path:
     parts = shlex.split(raw, posix=False)
-    resolved = [Path(part).expanduser().resolve() for part in parts]
-    if not resolved:
-        raise ValueError("Please provide at least one workspace path.")
-    return resolved
+    if len(parts) != 1:
+        raise ValueError("Please provide exactly one workspace path.")
+    return Path(parts[0]).expanduser().resolve()
 
 
 def _handle_workspace_command(
@@ -208,57 +202,35 @@ def _handle_workspace_command(
     logs_dir: Path,
     current_session_id: str,
     store: SessionStore,
-) -> tuple[AgentRuntime, list[Path]]:
+) -> tuple[AgentRuntime, Path]:
     if command in {"/workspace", "/workspace show"}:
-        _print_current_workspaces(agent.workspaces)
-        return agent, list(agent.workspaces)
+        _print_current_workspace(agent.workspace_root)
+        return agent, agent.workspace_root
 
     if command.startswith("/workspace set "):
-        new_workspaces = _parse_workspace_args(command[len("/workspace set "):])
+        new_workspace = _parse_workspace_arg(command[len("/workspace set "):])
         permission_mode = (
             agent.tool_loader.permission_manager.mode
             if agent.tool_loader.permission_manager is not None
             else None
         )
-        next_agent = _create_runtime(new_workspaces, logs_dir, agent.history, permission_mode)
-        store.update_workspaces(
+        next_agent = _create_runtime(new_workspace, logs_dir, agent.history, permission_mode)
+        store.update_workspace(
             current_session_id,
-            [str(path) for path in new_workspaces],
+            str(new_workspace),
             changed_at=datetime.now().isoformat(),
         )
-        print("Updated workspaces.\n")
-        _print_current_workspaces(new_workspaces)
-        return next_agent, new_workspaces
-
-    if command.startswith("/workspace add "):
-        additions = _parse_workspace_args(command[len("/workspace add "):])
-        merged = list(agent.workspaces)
-        for workspace in additions:
-            if workspace not in merged:
-                merged.append(workspace)
-        permission_mode = (
-            agent.tool_loader.permission_manager.mode
-            if agent.tool_loader.permission_manager is not None
-            else None
-        )
-        next_agent = _create_runtime(merged, logs_dir, agent.history, permission_mode)
-        store.update_workspaces(
-            current_session_id,
-            [str(path) for path in merged],
-            changed_at=datetime.now().isoformat(),
-        )
-        print("Added workspace.\n")
-        _print_current_workspaces(merged)
-        return next_agent, merged
+        print("Updated workspace.\n")
+        _print_current_workspace(new_workspace)
+        return next_agent, new_workspace
 
     print(
         "\nWorkspace commands:\n"
         "  /workspace\n"
         "  /workspace show\n"
-        "  /workspace set <path1> [<path2> ...]\n"
-        "  /workspace add <path1> [<path2> ...]\n"
+        "  /workspace set <path>\n"
     )
-    return agent, list(agent.workspaces)
+    return agent, agent.workspace_root
 
 
 def run_single_agent_cli():
@@ -272,13 +244,13 @@ def run_single_agent_cli():
     sessions_dir, logs_dir, workspace_root = create_cli_session(project_root)
     log_path = build_log_path(logs_dir, session_id, started_at)
     session_store = SessionStore(sessions_dir)
-    current_workspaces = [workspace_root]
-    agent = _create_runtime(current_workspaces, logs_dir)
+    current_workspace = workspace_root
+    agent = _create_runtime(current_workspace, logs_dir)
     _save_session_snapshot(
         store=session_store,
         session_id=session_id,
         agent=agent,
-        workspaces=current_workspaces,
+        workspace=current_workspace,
         created_at=started_at,
         metadata={"project_root": str(project_root)},
     )
@@ -287,9 +259,8 @@ def run_single_agent_cli():
     print("  - quit / exit: save the session log and leave")
     print("  - reset: clear current history")
     print("  - /resume: restore an earlier interactive session")
-    print("  - /workspace: show current workspaces")
-    print("  - /workspace set <path1> [<path2> ...]: replace workspaces")
-    print("  - /workspace add <path1> [<path2> ...]: append workspaces")
+    print("  - /workspace: show current workspace")
+    print("  - /workspace set <path>: replace workspace")
     print("  - context: print current prompt + history JSON")
     print("  - save: write current context JSON into this session temp directory")
     print("  - save-log: persist the session log now")
@@ -308,7 +279,7 @@ def run_single_agent_cli():
                     session_id=session_id,
                     started_at=started_at,
                     sessions_dir=sessions_dir,
-                    workspaces=current_workspaces,
+                    workspace=current_workspace,
                     log_path=log_path,
                 )
                 break
@@ -319,7 +290,7 @@ def run_single_agent_cli():
                     store=session_store,
                     session_id=session_id,
                     agent=agent,
-                    workspaces=current_workspaces,
+                    workspace=current_workspace,
                     created_at=started_at,
                     metadata={"project_root": str(project_root)},
                 )
@@ -331,7 +302,7 @@ def run_single_agent_cli():
                         store=session_store,
                         session_id=session_id,
                         agent=agent,
-                        workspaces=current_workspaces,
+                        workspace=current_workspace,
                         created_at=started_at,
                         metadata={"project_root": str(project_root)},
                     )
@@ -342,24 +313,22 @@ def run_single_agent_cli():
 
                 session_id = record.session_id
                 started_at = datetime.fromisoformat(record.created_at)
-                current_workspaces = [
-                    Path(workspace).expanduser().resolve() for workspace in (record.workspaces or [workspace_root])
-                ]
+                current_workspace = Path(record.workspace).expanduser().resolve() if record.workspace else workspace_root
                 permission_mode = (
                     agent.tool_loader.permission_manager.mode
                     if agent.tool_loader.permission_manager is not None
                     else None
                 )
                 agent.close()
-                agent = _create_runtime(current_workspaces, logs_dir, record.history, permission_mode)
+                agent = _create_runtime(current_workspace, logs_dir, record.history, permission_mode)
                 log_path = build_log_path(logs_dir, session_id, datetime.now())
                 print(f"Resumed session {session_id}.\n")
-                _print_current_workspaces(current_workspaces)
+                _print_current_workspace(current_workspace)
                 continue
 
             if user_input.lower().startswith("/workspace"):
                 try:
-                    next_agent, next_workspaces = _handle_workspace_command(
+                    next_agent, next_workspace = _handle_workspace_command(
                         command=user_input,
                         agent=agent,
                         logs_dir=logs_dir,
@@ -373,12 +342,12 @@ def run_single_agent_cli():
                 if next_agent is not agent:
                     agent.close()
                     agent = next_agent
-                    current_workspaces = next_workspaces
+                    current_workspace = next_workspace
                     _save_session_snapshot(
                         store=session_store,
                         session_id=session_id,
                         agent=agent,
-                        workspaces=current_workspaces,
+                        workspace=current_workspace,
                         created_at=started_at,
                         metadata={"project_root": str(project_root)},
                     )
@@ -401,7 +370,7 @@ def run_single_agent_cli():
                     session_id=session_id,
                     started_at=started_at,
                     sessions_dir=sessions_dir,
-                    workspaces=current_workspaces,
+                    workspace=current_workspace,
                     log_path=log_path,
                 )
                 continue
@@ -416,7 +385,7 @@ def run_single_agent_cli():
                 store=session_store,
                 session_id=session_id,
                 agent=agent,
-                workspaces=current_workspaces,
+                workspace=current_workspace,
                 created_at=started_at,
                 metadata={"project_root": str(project_root)},
             )
@@ -427,7 +396,7 @@ def run_single_agent_cli():
                 session_id=session_id,
                 started_at=started_at,
                 sessions_dir=sessions_dir,
-                workspaces=current_workspaces,
+                workspace=current_workspace,
                 log_path=log_path,
             )
             agent.close()

@@ -52,7 +52,7 @@ def test_append_session_index_records_workspace_and_log_file():
             session_id="abc123",
             started_at=datetime(2026, 3, 22, 15, 30, 0),
             history=[{"role": "user", "content": "hello world"}],
-            workspaces=[workspace_root],
+            workspace=workspace_root,
             log_path=log_path,
         )
 
@@ -83,7 +83,7 @@ def test_save_session_log_writes_to_session_log_folder():
             session_id="abc123",
             started_at=datetime(2026, 3, 22, 15, 30, 0),
             sessions_dir=sessions_dir,
-            workspaces=[workspace_root],
+            workspace=workspace_root,
             log_path=log_path,
         )
 

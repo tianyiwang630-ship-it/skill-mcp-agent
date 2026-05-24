@@ -6,6 +6,7 @@
 5 中间产物放进temp文件夹，尤其是pytest
 6 项目有更改，功能迭代、架构调整、bug修复等要写到开发日志.md里，记录日期、背景和关键更改内容，但是没改项目就不要记
 7 阅读中文内容，用utf-8
+8 python环境是anaconda的ai12，D:\Anaconda\envs\ai12\python.exe
 
 # 背景知识
 learning proj是用来学习和借鉴的项目文件夹。其中，skill-mcp-agent是我之前的项目。

@@ -11,20 +11,17 @@ from tests.conftest import cleanup_test_dir, make_test_dir
 from agent.core.prompt_docs_loader import load_workspace_prompt_documents
 
 
-def test_load_workspace_prompt_documents_reads_first_workspace_root_docs():
+def test_load_workspace_prompt_documents_reads_workspace_root_docs_only():
     tmp_dir = make_test_dir("prompt-docs")
     try:
-        first_workspace = tmp_dir / "workspace-a"
-        second_workspace = tmp_dir / "workspace-b"
-        nested = first_workspace / "nested"
+        workspace_root = tmp_dir / "workspace"
+        nested = workspace_root / "nested"
         nested.mkdir(parents=True)
-        second_workspace.mkdir(parents=True)
-        (first_workspace / "AGENTS.md").write_text("Private rules", encoding="utf-8")
-        (first_workspace / "SOUL.md").write_text("Private persona", encoding="utf-8")
+        (workspace_root / "AGENTS.md").write_text("Private rules", encoding="utf-8")
+        (workspace_root / "SOUL.md").write_text("Private persona", encoding="utf-8")
         (nested / "AGENTS.md").write_text("nested should be ignored", encoding="utf-8")
-        (second_workspace / "AGENTS.md").write_text("other workspace ignored", encoding="utf-8")
 
-        docs = load_workspace_prompt_documents([first_workspace, second_workspace])
+        docs = load_workspace_prompt_documents(workspace_root)
 
         assert [doc["name"] for doc in docs] == ["AGENTS.md", "SOUL.md"]
         assert docs[0]["content"] == "Private rules"

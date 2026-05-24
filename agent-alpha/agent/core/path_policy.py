@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
-
 from agent.core.sandbox_types import AccessAction, SandboxDecision, SandboxZone
 
 
-def classify_path(path: Path | None, *, workspaces: Iterable[Path], project_root: Path) -> SandboxZone:
+def classify_path(path: Path | None, *, workspace_root: Path, project_root: Path) -> SandboxZone:
     if path is None:
         return "unknown"
 
     resolved = path.resolve()
-    workspace_roots = [Path(workspace).resolve() for workspace in workspaces]
-    for workspace in workspace_roots:
-        if _is_relative_to(resolved, workspace):
-            return "workspace"
+    workspace_root = Path(workspace_root).resolve()
+    if _is_relative_to(resolved, workspace_root):
+        return "workspace"
 
     project_root = Path(project_root).resolve()
     if _is_relative_to(resolved, project_root):
@@ -27,10 +24,10 @@ def decide_path_access(
     path: Path | None,
     *,
     action: AccessAction,
-    workspaces: Iterable[Path],
+    workspace_root: Path,
     project_root: Path,
 ) -> tuple[SandboxDecision, SandboxZone]:
-    zone = classify_path(path, workspaces=workspaces, project_root=project_root)
+    zone = classify_path(path, workspace_root=workspace_root, project_root=project_root)
 
     if zone == "unknown" or action == "unknown":
         return "deny", zone

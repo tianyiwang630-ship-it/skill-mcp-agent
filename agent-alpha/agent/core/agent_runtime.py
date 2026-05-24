@@ -8,7 +8,7 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List
 
 try:
     import msvcrt
@@ -39,29 +39,25 @@ class AgentRuntime:
         self,
         max_turns: int = 5000,
         workspace_root: str | None = None,
-        workspaces: Sequence[str | Path] | None = None,
         logs_dir: str | None = None,
         task_id: str | None = None,
         llm_profile_name: str | None = None,
         role_config: RoleConfig | None = None,
     ):
-        self.workspaces = self._normalize_workspaces(workspace_root, workspaces)
-        self.workspace_root = self.workspaces[0]
-        self.additional_workspaces = self.workspaces[1:]
+        self.workspace_root = Path(workspace_root).resolve() if workspace_root else PROJECT_ROOT.resolve()
         self.runtime_logs_dir = Path(logs_dir).resolve() if logs_dir else None
         self.task_id = task_id
         self.llm_profile_name = llm_profile_name
         self.role_config = role_config or RoleConfig()
 
-        for workspace in self.workspaces:
-            workspace.mkdir(parents=True, exist_ok=True)
+        self.workspace_root.mkdir(parents=True, exist_ok=True)
 
         self.llm = LLMClient.from_profile(llm_profile_name)
         self.skill_loader = SkillLoader(PROJECT_ROOT / "skills")
         self.tool_loader = ToolLoader(
             project_root=PROJECT_ROOT,
             skill_loader=self.skill_loader,
-            workspaces=self.workspaces,
+            workspace_root=self.workspace_root,
         )
         self.max_turns = max_turns
         self.history: List[Dict[str, Any]] = []
@@ -72,7 +68,7 @@ class AgentRuntime:
         self.tools = self.tool_loader.resolve_tools(self.role_config)
         self.tool_loader.configure_runtime(self.workspace_root)
 
-        self.prompt_documents = load_workspace_prompt_documents(self.workspaces)
+        self.prompt_documents = load_workspace_prompt_documents(self.workspace_root)
         self.system_prompt = self._build_system_prompt()
 
         self.context_manager = ContextManager(
@@ -83,25 +79,9 @@ class AgentRuntime:
             keep_recent_turns=KEEP_RECENT_TURNS,
         )
 
-    def _normalize_workspaces(
-        self,
-        workspace_root: str | None,
-        workspaces: Sequence[str | Path] | None,
-    ) -> List[Path]:
-        if workspaces:
-            resolved = [Path(workspace).resolve() for workspace in workspaces]
-        else:
-            default_workspace = Path(workspace_root).resolve() if workspace_root else PROJECT_ROOT.resolve()
-            resolved = [default_workspace]
-
-        if not resolved:
-            raise ValueError("AgentRuntime requires at least one workspace")
-        return resolved
-
     def _build_system_prompt(self) -> str:
         return build_system_prompt(
-            private_workspace=self.workspace_root,
-            additional_workspaces=self.additional_workspaces,
+            workspace_root=self.workspace_root,
             logs_dir=self.runtime_logs_dir,
             skills_dir=PROJECT_ROOT / "skills",
             mcp_servers_dir=PROJECT_ROOT / "mcp-servers",
@@ -167,7 +147,7 @@ class AgentRuntime:
         return {
             "system_prompt": self.system_prompt,
             "available_tools": len(self.tools),
-            "workspaces": [str(path) for path in self.workspaces],
+            "workspace": str(self.workspace_root),
             "history": self.history,
             "role": self.role_config.name,
         }

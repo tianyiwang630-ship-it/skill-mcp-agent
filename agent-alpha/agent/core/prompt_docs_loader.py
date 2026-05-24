@@ -1,27 +1,23 @@
 """
-Load optional prompt documents from the first workspace root.
+Load optional prompt documents from the workspace root.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, List
 
 
 PROMPT_DOC_NAMES = ("AGENTS.md", "SOUL.md")
 
 
-def load_workspace_prompt_documents(workspaces: Iterable[Path | str]) -> List[Dict[str, str]]:
-    """Load AGENTS.md and SOUL.md from the first workspace root only."""
-    resolved_workspaces = [Path(workspace).resolve() for workspace in workspaces]
-    if not resolved_workspaces:
-        return []
-
-    private_workspace = resolved_workspaces[0]
+def load_workspace_prompt_documents(workspace_root: Path | str) -> List[Dict[str, str]]:
+    """Load AGENTS.md and SOUL.md from the workspace root only."""
+    workspace_root = Path(workspace_root).resolve()
     documents: List[Dict[str, str]] = []
 
     for name in PROMPT_DOC_NAMES:
-        file_path = private_workspace / name
+        file_path = workspace_root / name
         if not file_path.is_file():
             continue
         documents.append(

@@ -16,7 +16,7 @@ from agent.core.tool_loader import ToolLoader
 def _guard() -> SandboxGuard:
     return SandboxGuard(
         project_root=Path("D:/demo/agent-alpha"),
-        workspaces=[Path("D:/demo/agent-alpha/workspace")],
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
     )
 
 
@@ -104,7 +104,7 @@ def test_tool_loader_returns_guidance_for_denied_bash():
     loader = ToolLoader(
         project_root=Path("D:/demo/agent-alpha"),
         enable_permissions=False,
-        workspaces=[Path("D:/demo/agent-alpha/workspace")],
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
     )
 
     result = loader.execute_tool("bash", {"command": 'echo hello > "$TARGET_FILE"'})
@@ -117,7 +117,7 @@ def test_tool_loader_allows_project_command_bash_without_prompt():
     loader = ToolLoader(
         project_root=Path("D:/demo/agent-alpha"),
         enable_permissions=True,
-        workspaces=[Path("D:/demo/agent-alpha/workspace")],
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
     )
     loader.tool_executors["bash"] = lambda **kwargs: {"success": True, "details": kwargs}
 

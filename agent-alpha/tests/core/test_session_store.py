@@ -20,7 +20,7 @@ def test_session_store_saves_and_loads_full_history_snapshot():
         record = SessionRecord(
             session_id="abc123",
             kind=SessionKind.INTERACTIVE,
-            workspaces=["D:/demo/agent-alpha/workspace"],
+            workspace="D:/demo/agent-alpha/workspace",
             history=[
                 {"role": "user", "content": "hello"},
                 {"role": "assistant", "content": "world"},
@@ -35,7 +35,7 @@ def test_session_store_saves_and_loads_full_history_snapshot():
         assert loaded is not None
         assert loaded.session_id == "abc123"
         assert loaded.kind == SessionKind.INTERACTIVE
-        assert loaded.workspaces == ["D:/demo/agent-alpha/workspace"]
+        assert loaded.workspace == "D:/demo/agent-alpha/workspace"
         assert loaded.history[-1]["content"] == "world"
     finally:
         cleanup_test_dir(tmp_dir)
@@ -50,7 +50,7 @@ def test_session_store_lists_recent_interactive_sessions_only():
             SessionRecord(
                 session_id="interactive-1",
                 kind=SessionKind.INTERACTIVE,
-                workspaces=["D:/demo/workspace"],
+                workspace="D:/demo/workspace",
                 history=[{"role": "user", "content": "hello"}],
                 created_at="2026-04-08T10:00:00",
                 updated_at="2026-04-08T10:00:00",
@@ -60,7 +60,7 @@ def test_session_store_lists_recent_interactive_sessions_only():
             SessionRecord(
                 session_id="cron-1",
                 kind=SessionKind.CRON,
-                workspaces=["D:/demo/workspace"],
+                workspace="D:/demo/workspace",
                 history=[{"role": "user", "content": "scheduled"}],
                 created_at="2026-04-08T11:00:00",
                 updated_at="2026-04-08T11:00:00",
@@ -74,7 +74,7 @@ def test_session_store_lists_recent_interactive_sessions_only():
         cleanup_test_dir(tmp_dir)
 
 
-def test_session_store_updates_workspaces_in_same_session_and_records_event():
+def test_session_store_updates_workspace_in_same_session_and_records_event():
     tmp_dir = make_test_dir("session-store-workspace-change")
     try:
         sessions_dir = tmp_dir / "session-log" / "sessions"
@@ -82,22 +82,22 @@ def test_session_store_updates_workspaces_in_same_session_and_records_event():
         record = SessionRecord(
             session_id="abc123",
             kind=SessionKind.INTERACTIVE,
-            workspaces=["D:/demo/workspace"],
+            workspace="D:/demo/workspace",
             history=[{"role": "user", "content": "hello"}],
             created_at="2026-04-08T10:00:00",
             updated_at="2026-04-08T10:00:00",
         )
         store.save(record)
 
-        updated = store.update_workspaces(
+        updated = store.update_workspace(
             "abc123",
-            ["D:/demo/workspace", "D:/demo/extra"],
+            "D:/demo/extra",
             changed_at="2026-04-08T10:05:00",
         )
 
-        assert updated.workspaces == ["D:/demo/workspace", "D:/demo/extra"]
+        assert updated.workspace == "D:/demo/extra"
         assert updated.events[-1]["type"] == "workspace_changed"
-        assert updated.events[-1]["workspaces"] == ["D:/demo/workspace", "D:/demo/extra"]
+        assert updated.events[-1]["workspace"] == "D:/demo/extra"
         assert updated.updated_at == "2026-04-08T10:05:00"
     finally:
         cleanup_test_dir(tmp_dir)

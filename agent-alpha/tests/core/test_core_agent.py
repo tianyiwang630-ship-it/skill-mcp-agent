@@ -12,28 +12,27 @@ from tests.conftest import cleanup_test_dir, make_test_dir
 from agent.core.agent_runtime import AgentRuntime
 
 
-def test_agent_runtime_loads_prompt_docs_only_from_first_workspace_root():
+def test_agent_runtime_loads_prompt_docs_from_workspace_root_only():
     tmp_dir = make_test_dir("core-agent")
     try:
-        first_workspace = tmp_dir / "workspace-a"
-        second_workspace = tmp_dir / "workspace-b"
-        first_workspace.mkdir(parents=True)
-        second_workspace.mkdir(parents=True)
-        (first_workspace / "AGENTS.md").write_text("Use the private rulebook.", encoding="utf-8")
-        (first_workspace / "SOUL.md").write_text("You are a patient planner.", encoding="utf-8")
-        (second_workspace / "AGENTS.md").write_text("This should not be loaded.", encoding="utf-8")
+        workspace_root = tmp_dir / "workspace"
+        nested = workspace_root / "nested"
+        nested.mkdir(parents=True)
+        (workspace_root / "AGENTS.md").write_text("Use the private rulebook.", encoding="utf-8")
+        (workspace_root / "SOUL.md").write_text("You are a patient planner.", encoding="utf-8")
+        (nested / "AGENTS.md").write_text("This should not be loaded.", encoding="utf-8")
 
         with patch("agent.core.agent_runtime.ToolLoader.load_all", lambda self: []), patch(
             "agent.core.agent_runtime.LLMClient.from_profile",
             side_effect=lambda profile_name=None: object(),
         ):
             agent = AgentRuntime(
-                workspaces=[str(first_workspace), str(second_workspace)],
+                workspace_root=str(workspace_root),
                 logs_dir=str(tmp_dir / "logs"),
             )
 
-        assert agent.workspace_root == first_workspace.resolve()
-        assert agent.workspaces == [first_workspace.resolve(), second_workspace.resolve()]
+        assert agent.workspace_root == workspace_root.resolve()
+        assert not hasattr(agent, "workspaces")
         assert "Use the private rulebook." in agent.system_prompt
         assert "You are a patient planner." in agent.system_prompt
         assert "This should not be loaded." not in agent.system_prompt
@@ -62,7 +61,7 @@ def test_agent_runtime_exposes_log_payload_without_owning_log_files():
         assert payload["history"] == [{"role": "user", "content": "hello"}]
         assert payload["available_tools"] == 0
         assert "system_prompt" in payload
-        assert payload["workspaces"] == [str(workspace_root.resolve())]
+        assert payload["workspace"] == str(workspace_root.resolve())
         assert not hasattr(agent, "session_id")
         assert not hasattr(agent, "logs_dir")
         assert not hasattr(agent, "input_dir")

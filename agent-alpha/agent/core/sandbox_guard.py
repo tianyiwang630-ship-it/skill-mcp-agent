@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Dict
 
 from agent.core.command_path_extractor import (
     classify_bash_command,
@@ -21,9 +21,9 @@ class SandboxGuard:
         "edit": "write",
     }
 
-    def __init__(self, *, project_root: Path, workspaces: Iterable[Path]):
+    def __init__(self, *, project_root: Path, workspace_root: Path):
         self.project_root = Path(project_root).resolve()
-        self.workspaces = [Path(workspace).resolve() for workspace in workspaces]
+        self.workspace_root = Path(workspace_root).resolve()
 
     def check_tool_call(self, tool_name: str, arguments: Dict[str, Any]) -> SandboxCheckResult:
         if tool_name == "bash":
@@ -42,7 +42,7 @@ class SandboxGuard:
         decision, zone = decide_path_access(
             target_path,
             action=action,
-            workspaces=self.workspaces,
+            workspace_root=self.workspace_root,
             project_root=self.project_root,
         )
 
@@ -54,9 +54,9 @@ class SandboxGuard:
             if decision == "allow":
                 reason = "Read access is allowed inside the agent-alpha project"
             else:
-                reason = "Write access inside the agent-alpha project but outside workspaces requires user approval"
+                reason = "Write access inside the agent-alpha project but outside the workspace requires user approval"
         elif zone == "outside":
-            reason = "Target path is outside both the agent workspaces and the agent-alpha project"
+            reason = "Target path is outside both the agent workspace and the agent-alpha project"
         else:
             reason = "Target path could not be classified safely"
 
@@ -119,7 +119,7 @@ class SandboxGuard:
             decision, zone = decide_path_access(
                 script_path,
                 action="read",
-                workspaces=self.workspaces,
+                workspace_root=self.workspace_root,
                 project_root=self.project_root,
             )
             if zone in {"workspace", "project"}:
@@ -161,7 +161,7 @@ class SandboxGuard:
                 decide_path_access(
                     path,
                     action=action,
-                    workspaces=self.workspaces,
+                    workspace_root=self.workspace_root,
                     project_root=self.project_root,
                 )
                 for path in paths
@@ -172,7 +172,7 @@ class SandboxGuard:
                     decision="deny",
                     action=action,
                     zone=next(zone for decision, zone in decisions if decision == "deny"),
-                    reason="The bash command targets a path outside the allowed workspaces or project boundaries",
+                    reason="The bash command targets a path outside the allowed workspace or project boundaries",
                     guidance=explain_parseable_mutation_forms() if category == "path_mutation" else None,
                 )
 
@@ -181,7 +181,7 @@ class SandboxGuard:
                     decision="ask",
                     action=action,
                     zone=next(zone for decision, zone in decisions if decision == "ask"),
-                    reason="The bash command modifies files inside the agent-alpha project but outside the current workspaces",
+                    reason="The bash command modifies files inside the agent-alpha project but outside the current workspace",
                     guidance=explain_parseable_mutation_forms() if category == "path_mutation" else None,
                 )
 

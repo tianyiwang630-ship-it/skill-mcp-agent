@@ -27,7 +27,7 @@ class SessionKind(StrEnum):
 class SessionRecord:
     session_id: str
     kind: SessionKind = SessionKind.INTERACTIVE
-    workspaces: list[str] = field(default_factory=list)
+    workspace: str = ""
     history: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     events: list[dict[str, Any]] = field(default_factory=list)
@@ -52,7 +52,7 @@ class SessionRecord:
         return cls(
             session_id=data["session_id"],
             kind=kind if isinstance(kind, SessionKind) else SessionKind(str(kind)),
-            workspaces=list(data.get("workspaces", [])),
+            workspace=str(data.get("workspace") or ""),
             history=list(data.get("history", [])),
             metadata=dict(data.get("metadata", {})),
             events=list(data.get("events", [])),
@@ -102,10 +102,10 @@ class SessionStore:
         records.sort(key=lambda item: item.updated_at, reverse=True)
         return records[:limit] if limit is not None else records
 
-    def update_workspaces(
+    def update_workspace(
         self,
         session_id: str,
-        workspaces: list[str],
+        workspace: str,
         *,
         changed_at: str | None = None,
     ) -> SessionRecord:
@@ -114,13 +114,13 @@ class SessionStore:
             raise ValueError(f"Session not found: {session_id}")
 
         timestamp = changed_at or _now_iso()
-        record.workspaces = list(workspaces)
+        record.workspace = str(workspace)
         record.updated_at = timestamp
         record.events.append(
             {
                 "type": "workspace_changed",
                 "timestamp": timestamp,
-                "workspaces": list(workspaces),
+                "workspace": str(workspace),
             }
         )
         self.save(record)

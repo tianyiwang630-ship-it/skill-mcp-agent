@@ -11,11 +11,11 @@ from agent.core.sandbox_guard import SandboxGuard
 
 
 def test_sandbox_guard_allows_read_inside_workspace():
-    workspaces = [Path("D:/demo/agent-alpha/sessions/abc123")]
+    workspace_root = Path("D:/demo/agent-alpha/workspace")
     project_root = Path("D:/demo/agent-alpha")
-    guard = SandboxGuard(project_root=project_root, workspaces=workspaces)
+    guard = SandboxGuard(project_root=project_root, workspace_root=workspace_root)
 
-    result = guard.check_tool_call("read", {"file_path": "D:/demo/agent-alpha/sessions/abc123/note.txt"})
+    result = guard.check_tool_call("read", {"file_path": "D:/demo/agent-alpha/workspace/note.txt"})
 
     assert result.decision == "allow"
     assert result.action == "read"
@@ -23,9 +23,9 @@ def test_sandbox_guard_allows_read_inside_workspace():
 
 
 def test_sandbox_guard_asks_for_write_inside_project_but_outside_workspace():
-    workspaces = [Path("D:/demo/agent-alpha/sessions/abc123")]
+    workspace_root = Path("D:/demo/agent-alpha/workspace")
     project_root = Path("D:/demo/agent-alpha")
-    guard = SandboxGuard(project_root=project_root, workspaces=workspaces)
+    guard = SandboxGuard(project_root=project_root, workspace_root=workspace_root)
 
     result = guard.check_tool_call("write", {"file_path": "D:/demo/agent-alpha/agent/core/config.py"})
 
@@ -35,9 +35,9 @@ def test_sandbox_guard_asks_for_write_inside_project_but_outside_workspace():
 
 
 def test_sandbox_guard_denies_read_outside_project_and_workspace():
-    workspaces = [Path("D:/demo/agent-alpha/sessions/abc123")]
+    workspace_root = Path("D:/demo/agent-alpha/workspace")
     project_root = Path("D:/demo/agent-alpha")
-    guard = SandboxGuard(project_root=project_root, workspaces=workspaces)
+    guard = SandboxGuard(project_root=project_root, workspace_root=workspace_root)
 
     result = guard.check_tool_call("read", {"file_path": "D:/other/place/secret.txt"})
 
@@ -46,9 +46,9 @@ def test_sandbox_guard_denies_read_outside_project_and_workspace():
 
 
 def test_sandbox_guard_denies_when_file_path_is_missing():
-    workspaces = [Path("D:/demo/agent-alpha/sessions/abc123")]
+    workspace_root = Path("D:/demo/agent-alpha/workspace")
     project_root = Path("D:/demo/agent-alpha")
-    guard = SandboxGuard(project_root=project_root, workspaces=workspaces)
+    guard = SandboxGuard(project_root=project_root, workspace_root=workspace_root)
 
     result = guard.check_tool_call("write", {})
 

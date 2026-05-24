@@ -54,7 +54,7 @@ class ToolLoader:
         project_root: Path | None = None,
         enable_permissions: bool = True,
         skill_loader: SkillLoader | None = None,
-        workspaces: List[Path] | None = None,
+        workspace_root: Path | None = None,
     ):
         if project_root is None:
             current = Path(__file__).parent
@@ -64,8 +64,8 @@ class ToolLoader:
 
         self.skills_dir = self.project_root / "skills"
         self.skill_loader = skill_loader or SkillLoader(self.skills_dir)
-        self.workspaces = [Path(workspace).resolve() for workspace in (workspaces or [self.project_root])]
-        self.sandbox_guard = SandboxGuard(project_root=self.project_root, workspaces=self.workspaces)
+        self.workspace_root = Path(workspace_root).resolve() if workspace_root else self.project_root.resolve()
+        self.sandbox_guard = SandboxGuard(project_root=self.project_root, workspace_root=self.workspace_root)
 
         self.tools: List[Dict[str, Any]] = []
         self.tool_executors: Dict[str, Any] = {}
@@ -165,9 +165,10 @@ class ToolLoader:
 
     def configure_runtime(self, workspace_root: Path) -> None:
         """Bind workspace-aware tool instances to the active runtime."""
+        self.workspace_root = Path(workspace_root).resolve()
         for tool in self.tool_instances.values():
             if hasattr(tool, "temp_dir"):
-                tool.temp_dir = workspace_root
+                tool.temp_dir = self.workspace_root
 
     def _load_mcp_tools(self) -> None:
         """Load MCP tools and defer searchable servers behind tool_search."""
