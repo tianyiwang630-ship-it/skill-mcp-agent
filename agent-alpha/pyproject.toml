@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-alpha"
+version = "0.1.0"
+description = "Single-agent runtime for local skill and tool orchestration."
+requires-python = ">=3.12"
+dependencies = [
+  "fastmcp>=2.14.0",
+  "openai>=1.0.0",
+  "pyyaml>=6.0",
+  "tiktoken>=0.5.0",
+  "watchdog>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "black>=23.0.0",
+]
+
+[project.scripts]
+agent-alpha = "agent.cli.main:run_single_agent_cli"
+
+[tool.setuptools.packages.find]
+include = ["agent", "agent.*"]
