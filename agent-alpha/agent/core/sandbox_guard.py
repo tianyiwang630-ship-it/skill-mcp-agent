@@ -8,6 +8,7 @@ from agent.core.command_path_extractor import (
     explain_parseable_mutation_forms,
     extract_bash_paths,
     extract_script_path,
+    split_bash_segments,
 )
 from agent.core.path_policy import decide_path_access
 from agent.core.sandbox_types import AccessAction, SandboxCheckResult
@@ -68,6 +69,44 @@ class SandboxGuard:
         )
 
     def _check_bash_command(self, command: str) -> SandboxCheckResult:
+        segments = split_bash_segments(command)
+        if segments is None:
+            return SandboxCheckResult(
+                decision="deny",
+                action="unknown",
+                zone="unknown",
+                reason="Shell command substitution or malformed command chaining is not allowed",
+                guidance="Use simple chained commands with &&, ||, or ; only when each command is safe on its own.",
+            )
+        if len(segments) > 1:
+            return self._check_bash_segments(segments)
+        return self._check_single_bash_command(command)
+
+    def _check_bash_segments(self, segments: list[str]) -> SandboxCheckResult:
+        results = [self._check_single_bash_command(segment) for segment in segments]
+        denied = next((result for result in results if result.decision == "deny"), None)
+        if denied:
+            return denied
+
+        asks = [result for result in results if result.decision == "ask"]
+        if asks:
+            action: AccessAction = "write" if any(result.action in {"write", "delete"} for result in asks) else "unknown"
+            return SandboxCheckResult(
+                decision="ask",
+                action=action,
+                zone="project",
+                reason="One or more chained bash commands require user approval",
+                guidance="Review the full chained command before allowing it.",
+            )
+
+        return SandboxCheckResult(
+            decision="allow",
+            action="read",
+            zone="unknown",
+            reason="All chained bash commands are read-only or diagnostic commands",
+        )
+
+    def _check_single_bash_command(self, command: str) -> SandboxCheckResult:
         category = classify_bash_command(command)
 
         if category == "dangerous":
@@ -193,11 +232,11 @@ class SandboxGuard:
             )
 
         return SandboxCheckResult(
-            decision="deny",
+            decision="ask",
             action="unknown",
             zone="unknown",
-            reason="This bash command is not in an allowed or safely parseable form",
-            guidance=explain_parseable_mutation_forms(),
+            reason="This bash command is not recognized as read-only, an install command, or a known dangerous command",
+            guidance="Unknown commands require user approval. Prefer simple single commands so the sandbox can classify them.",
         )
 
     def _extract_path(self, arguments: Dict[str, Any]) -> Path | None:

@@ -23,6 +23,7 @@ function Invoke-NativeCommand {
 $VenvDir = Join-Path $ProjectRoot ".venv"
 $ScriptsDir = Join-Path $VenvDir "Scripts"
 $PythonExe = Join-Path $ScriptsDir "python.exe"
+$PipExe = Join-Path $ScriptsDir "pip.exe"
 $PythonVersion = "3.12"
 
 if (-not (Test-Path $PythonExe)) {
@@ -49,7 +50,15 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+if (-not (Test-Path $PipExe)) {
+    Write-Host "Bootstrapping pip inside agent-alpha .venv..." -ForegroundColor Cyan
+    Invoke-NativeCommand $PythonExe @("-m", "ensurepip", "--upgrade")
+}
+
 $env:VIRTUAL_ENV = $VenvDir
+$env:AGENT_ALPHA_PROJECT_ROOT = $ProjectRoot
+$env:AGENT_ALPHA_PYTHON = $PythonExe
+$env:PYTHONNOUSERSITE = "1"
 $env:PATH = "$ScriptsDir;$env:PATH"
 
 Write-Host "Installing/updating requirements..." -ForegroundColor Cyan
@@ -57,6 +66,8 @@ Invoke-NativeCommand uv @("pip", "install", "--python", $PythonExe, "-r", "requi
 
 Write-Host "Installing/updating agent-alpha in editable mode..." -ForegroundColor Cyan
 Invoke-NativeCommand uv @("pip", "install", "--python", $PythonExe, "-e", ".")
+
+$env:PIP_REQUIRE_VIRTUALENV = "true"
 
 Write-Host "Starting agent-alpha..." -ForegroundColor Green
 Invoke-NativeCommand $PythonExe @("-m", "agent.cli.main")

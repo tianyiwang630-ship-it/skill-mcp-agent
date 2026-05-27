@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from agent.core.command_path_extractor import classify_bash_command
 from agent.core.sandbox_guard import SandboxGuard
 from agent.core.tool_loader import ToolLoader
+from agent.tools.bash_tool import BashTool
 
 
 def _guard() -> SandboxGuard:
@@ -22,6 +23,37 @@ def _guard() -> SandboxGuard:
 
 def test_classify_python_script_run():
     assert classify_bash_command('python "D:/demo/agent-alpha/workspace/job.py"') == "script_run"
+
+
+def test_bash_allows_common_environment_diagnostics():
+    commands = [
+        "python --version",
+        "D:/demo/agent-alpha/.venv/Scripts/python.exe --version",
+        "pip --version",
+        "node --version",
+        "where python",
+        "Get-Command python",
+        "Test-Path D:/demo/agent-alpha/.venv",
+        "echo test",
+    ]
+
+    for command in commands:
+        result = _guard().check_tool_call("bash", {"command": command})
+        assert result.decision == "allow", command
+
+
+def test_bash_allows_chained_read_only_diagnostics():
+    result = _guard().check_tool_call("bash", {"command": "which python && python --version"})
+
+    assert result.decision == "allow"
+    assert result.action == "read"
+
+
+def test_bash_asks_for_chained_command_with_install_segment():
+    result = _guard().check_tool_call("bash", {"command": "python --version && pipx install agent-reach"})
+
+    assert result.decision == "ask"
+    assert result.action == "write"
 
 
 def test_bash_allows_python_script_inside_project():
@@ -43,6 +75,32 @@ def test_bash_asks_for_package_install():
 
     assert result.decision == "ask"
     assert result.action == "write"
+
+
+def test_bash_asks_for_uv_and_pipx_package_installs():
+    uv_result = _guard().check_tool_call(
+        "bash",
+        {"command": "uv pip install --python D:/demo/agent-alpha/.venv/Scripts/python.exe agent-reach"},
+    )
+    pipx_result = _guard().check_tool_call("bash", {"command": "pipx install agent-reach"})
+
+    assert uv_result.decision == "ask"
+    assert uv_result.action == "write"
+    assert pipx_result.decision == "ask"
+    assert pipx_result.action == "write"
+
+
+def test_bash_asks_for_python_venv_creation_and_external_tool_install():
+    venv_result = _guard().check_tool_call(
+        "bash",
+        {"command": "python -m venv D:/demo/agent-alpha/workspace/.agent-reach-venv"},
+    )
+    tool_result = _guard().check_tool_call("bash", {"command": "agent-reach install --env=auto"})
+
+    assert venv_result.decision == "ask"
+    assert venv_result.action == "write"
+    assert tool_result.decision == "ask"
+    assert tool_result.action == "write"
 
 
 def test_bash_asks_for_package_uninstall():
@@ -83,6 +141,28 @@ def test_bash_denies_git_clean_force():
     result = _guard().check_tool_call("bash", {"command": "git clean -fd"})
 
     assert result.decision == "deny"
+
+
+def test_bash_denies_dangerous_segment_in_chained_command():
+    result = _guard().check_tool_call("bash", {"command": "python --version && sudo apt install curl"})
+
+    assert result.decision == "deny"
+
+
+def test_bash_denies_powershell_dangerous_commands():
+    commands = [
+        "Remove-Item -Recurse -Force C:/Users/example",
+        "Stop-Computer",
+        "Restart-Computer",
+        "Set-ExecutionPolicy Unrestricted",
+        "Invoke-Expression $payload",
+        "Set-ItemProperty HKLM:/Software/Test Name Value",
+        "netsh advfirewall set allprofiles state off",
+    ]
+
+    for command in commands:
+        result = _guard().check_tool_call("bash", {"command": command})
+        assert result.decision == "deny", command
 
 
 def test_bash_denies_unparseable_mutation_and_returns_guidance():
@@ -126,3 +206,14 @@ def test_tool_loader_allows_project_command_bash_without_prompt():
 
     assert result["success"] is True
     assert result["details"]["command"] == "python -m compileall agent"
+
+
+def test_bash_tool_prefers_powershell_on_windows():
+    completed = type("Completed", (), {"returncode": 0})()
+
+    with patch("platform.system", return_value="Windows"):
+        with patch("subprocess.run", return_value=completed) as run:
+            tool = BashTool()
+
+    assert tool.shell == "powershell"
+    assert run.call_args_list[0].args[0][:3] == ["powershell", "-NoProfile", "-Command"]

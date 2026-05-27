@@ -5,6 +5,8 @@ Primary agent runtime entrypoint.
 from __future__ import annotations
 
 import json
+import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -32,6 +34,26 @@ from agent.core.tool_loader import ToolLoader
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
+def configure_python_environment(project_root: Path) -> None:
+    """Pin child process Python tooling to the runtime environment."""
+    runtime_python = Path(sys.executable).resolve()
+    scripts_dir = runtime_python.parent
+    current_path = os.environ.get("PATH", "")
+    path_parts = current_path.split(os.pathsep) if current_path else []
+
+    os.environ["AGENT_ALPHA_PROJECT_ROOT"] = str(Path(project_root).resolve())
+    os.environ["AGENT_ALPHA_PYTHON"] = str(runtime_python)
+    os.environ.setdefault("PYTHONNOUSERSITE", "1")
+
+    if sys.prefix != sys.base_prefix:
+        os.environ.setdefault("VIRTUAL_ENV", sys.prefix)
+
+    if str(scripts_dir) not in path_parts:
+        os.environ["PATH"] = str(scripts_dir) + os.pathsep + current_path
+
+    os.environ.setdefault("PIP_REQUIRE_VIRTUALENV", "true")
+
+
 class AgentRuntime:
     """Reusable runtime for a single agent instance."""
 
@@ -50,6 +72,7 @@ class AgentRuntime:
         self.llm_profile_name = llm_profile_name
         self.role_config = role_config or RoleConfig()
 
+        configure_python_environment(PROJECT_ROOT)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
         self.llm = LLMClient.from_profile(llm_profile_name)
@@ -88,6 +111,7 @@ class AgentRuntime:
             mcp_servers_dir=PROJECT_ROOT / "mcp-servers",
             mcp_registry_path=PROJECT_ROOT / "mcp-servers" / "registry.json",
             task_id=self.task_id,
+            runtime_python=Path(sys.executable).resolve(),
             skill_summaries=self.skill_loader.get_summaries(),
             prompt_documents=self.prompt_documents,
         )

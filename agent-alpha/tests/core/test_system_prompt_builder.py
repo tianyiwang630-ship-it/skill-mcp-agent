@@ -16,13 +16,16 @@ def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
     skills_dir = Path("D:/demo/project/skills")
     mcp_servers_dir = Path("D:/demo/project/mcp-servers")
     mcp_registry_path = mcp_servers_dir / "registry.json"
+    runtime_python = Path("D:/demo/project/.venv/Scripts/python.exe")
 
     prompt = build_system_prompt(
         workspace_root=workspace_root,
         logs_dir=logs_dir,
         skills_dir=skills_dir,
+        workspace_skills_dir=workspace_root / "skills",
         mcp_servers_dir=mcp_servers_dir,
         mcp_registry_path=mcp_registry_path,
+        runtime_python=runtime_python,
         task_id="task-1",
         skill_summaries=[
             {
@@ -54,6 +57,8 @@ def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
     assert str(workspace_root) in prompt
     assert str(logs_dir) in prompt
     assert str(skills_dir) in prompt
+    assert str(workspace_root / "skills") in prompt
+    assert str(runtime_python) in prompt
     assert str(mcp_servers_dir) in prompt
     assert str(mcp_registry_path) in prompt
     assert "AGENTS.md and SOUL.md are only loaded from the workspace root" in prompt

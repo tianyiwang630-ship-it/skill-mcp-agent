@@ -10,11 +10,29 @@ from agent.core.sandbox_types import AccessAction, BashCategory
 
 READ_ONLY_SINGLE_COMMANDS = {"pwd"}
 READ_ONLY_PATH_COMMANDS = {"ls", "dir", "cat", "type", "rg", "grep", "find"}
+READ_ONLY_LOOKUP_COMMANDS = {"which", "where", "get-command", "test-path"}
+VERSION_COMMANDS = {
+    "python",
+    "python3",
+    "py",
+    "pip",
+    "pip3",
+    "pipx",
+    "uv",
+    "node",
+    "npm",
+    "pnpm",
+    "yarn",
+    "git",
+    "gh",
+}
 READ_ONLY_GIT_SUBCOMMANDS = {"status", "diff", "log", "show", "branch", "rev-parse", "ls-files"}
 SCRIPT_RUNNERS = {"python", "python3", "py", "node"}
 PACKAGE_INSTALL_PATTERNS = {
     ("pip", "install"),
     ("pip", "uninstall"),
+    ("pipx", "install"),
+    ("pipx", "uninstall"),
     ("npm", "install"),
     ("npm", "uninstall"),
     ("pnpm", "install"),
@@ -25,6 +43,8 @@ PACKAGE_INSTALL_PATTERNS = {
     ("yarn", "add"),
     ("yarn", "uninstall"),
     ("yarn", "remove"),
+    ("uv", "pip"),
+    ("uv", "tool"),
 }
 PROJECT_COMMAND_PATTERNS = {
     ("pytest",),
@@ -44,13 +64,39 @@ DANGEROUS_COMMANDS = {
     "diskpart",
     "shutdown",
     "reboot",
+    "restart-computer",
+    "stop-computer",
     "takeown",
     "icacls",
     "chmod",
     "chown",
+    "set-executionpolicy",
+    "invoke-expression",
+    "iex",
+    "start-process",
+}
+DANGEROUS_POWERSHELL_MUTATIONS = {
+    "remove-item",
+    "del",
+    "erase",
+    "rd",
+    "rmdir",
+}
+DANGEROUS_POWERSHELL_ADMIN = {
+    "set-itemproperty",
+    "new-itemproperty",
+    "remove-itemproperty",
+    "set-acl",
+    "disable-windowsoptionalfeature",
+    "enable-windowsoptionalfeature",
+    "bcdedit",
+    "reg",
+    "sc",
+    "netsh",
 }
 MUTATION_COMMANDS = {"mkdir", "cp", "mv", "rm", "del", "rmdir", "touch", "tee", "sed", "echo", "git"}
 CONTROL_OPERATORS = ("&&", "||", ";", "$(", "`")
+CHAIN_OPERATORS = {"&&", "||", ";"}
 
 
 def classify_bash_command(command: str) -> BashCategory:
@@ -113,14 +159,46 @@ def explain_parseable_mutation_forms() -> str:
     )
 
 
+def split_bash_segments(command: str) -> list[str] | None:
+    """Split simple chained commands at &&, ||, and ; operators."""
+    if "$(" in command or "`" in command:
+        return None
+
+    tokens = _split_command(command)
+    if not tokens:
+        return []
+
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        if token in CHAIN_OPERATORS:
+            if not segments[-1]:
+                return None
+            segments.append([])
+            continue
+        segments[-1].append(token)
+
+    if any(not segment for segment in segments):
+        return None
+    return [" ".join(segment) for segment in segments]
+
+
 def _extract_read_only_paths(command: str) -> tuple[AccessAction, list[Path]] | None:
     tokens = _split_command(command)
     if not tokens:
         return None
 
-    first = tokens[0].lower()
+    first = _command_name(tokens[0])
 
     if first == "pwd":
+        return "read", []
+
+    if first == "echo" and not any(token in tokens for token in {">", ">>", "|"}) and not any(">" in token or "|" in token for token in tokens):
+        return "read", []
+
+    if first in VERSION_COMMANDS and any(token.lower() in {"--version", "-version", "-v"} for token in tokens[1:]):
+        return "read", []
+
+    if first in READ_ONLY_LOOKUP_COMMANDS:
         return "read", []
 
     if first == "git":
@@ -205,41 +283,62 @@ def _extract_mutation_paths(command: str) -> tuple[AccessAction, list[Path]] | N
 
 
 def _is_dangerous_command(command: str, tokens: list[str]) -> bool:
-    first = tokens[0].lower()
+    first = _command_name(tokens[0])
     if first in DANGEROUS_COMMANDS:
         if first == "chmod":
             lowered = command.lower()
             return " 777" in lowered or " a+w" in lowered or " -r 777" in lowered
         return True
+    if first in DANGEROUS_POWERSHELL_ADMIN:
+        return True
+    if first in DANGEROUS_POWERSHELL_MUTATIONS:
+        lowered_tokens = {token.lower() for token in tokens[1:]}
+        lowered_command = command.lower()
+        if "-recurse" in lowered_tokens and "-force" in lowered_tokens:
+            return True
+        if any(target in lowered_command for target in [" c:\\", " c:/", " $env:userprofile", " $home", " ~"]):
+            return True
 
     normalized = " ".join(token.lower() for token in tokens)
     return "rm -rf /" in normalized or "rm -fr /" in normalized or normalized.startswith("git clean -fd")
 
 
 def _is_package_install(tokens: list[str]) -> bool:
-    lowered = tuple(token.lower() for token in tokens[:2])
+    normalized = _normalized_tokens(tokens)
+    lowered = tuple(normalized[:2])
     if lowered in PACKAGE_INSTALL_PATTERNS:
         return True
-    return len(tokens) >= 4 and tokens[0].lower() in {"python", "python3", "py"} and tokens[1:4] == ["-m", "pip", "install"]
+    if len(normalized) >= 4 and normalized[0] in {"python", "python3", "py"} and normalized[1:4] == ["-m", "pip", "install"]:
+        return True
+    if len(normalized) >= 3 and normalized[0] in {"python", "python3", "py"} and normalized[1:3] == ["-m", "venv"]:
+        return True
+    return len(normalized) >= 2 and normalized[1] == "install"
 
 
 def _is_project_command(tokens: list[str]) -> bool:
-    lowered = tuple(token.lower() for token in tokens[:2])
-    single = (tokens[0].lower(),) if tokens else tuple()
+    normalized = _normalized_tokens(tokens)
+    lowered = tuple(normalized[:2])
+    single = (normalized[0],) if normalized else tuple()
     if lowered in PROJECT_COMMAND_PATTERNS or single in PROJECT_COMMAND_PATTERNS:
-        if len(tokens) >= 3 and tokens[0].lower() in {"python", "python3", "py"} and tokens[1] == "-m" and tokens[2] == "pip":
+        if len(normalized) >= 3 and normalized[0] in {"python", "python3", "py"} and normalized[1] == "-m" and normalized[2] == "pip":
             return False
         return True
     return False
 
 
 def _is_script_run(tokens: list[str]) -> bool:
-    return len(tokens) >= 2 and tokens[0].lower() in SCRIPT_RUNNERS and not tokens[1].startswith("-")
+    return len(tokens) >= 2 and _command_name(tokens[0]) in SCRIPT_RUNNERS and not tokens[1].startswith("-")
 
 
 def _is_read_only_command(tokens: list[str]) -> bool:
-    first = tokens[0].lower()
+    first = _command_name(tokens[0])
     if first in READ_ONLY_SINGLE_COMMANDS:
+        return True
+    if first == "echo" and not any(token in tokens for token in {">", ">>", "|"}) and not any(">" in token or "|" in token for token in tokens):
+        return True
+    if first in VERSION_COMMANDS and any(token.lower() in {"--version", "-version", "-v"} for token in tokens[1:]):
+        return True
+    if first in READ_ONLY_LOOKUP_COMMANDS:
         return True
     if first in READ_ONLY_PATH_COMMANDS:
         return True
@@ -247,7 +346,7 @@ def _is_read_only_command(tokens: list[str]) -> bool:
 
 
 def _is_path_mutation_command(command: str, tokens: list[str]) -> bool:
-    first = tokens[0].lower()
+    first = _command_name(tokens[0])
     if first not in MUTATION_COMMANDS:
         return False
     if first == "git":
@@ -269,6 +368,20 @@ def _strip_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
+
+
+def _command_name(token: str) -> str:
+    name = token.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    for suffix in (".exe", ".cmd", ".bat", ".ps1"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _normalized_tokens(tokens: list[str]) -> list[str]:
+    if not tokens:
+        return []
+    return [_command_name(tokens[0]), *[token.lower() for token in tokens[1:]]]
 
 
 def _resolve_path(raw_path: str) -> Path | None:
