@@ -166,6 +166,7 @@ class ToolLoader:
     def configure_runtime(self, workspace_root: Path) -> None:
         """Bind workspace-aware tool instances to the active runtime."""
         self.workspace_root = Path(workspace_root).resolve()
+        self.skill_loader.set_workspace_skills_dir(self.workspace_root / "skills")
         for tool in self.tool_instances.values():
             if hasattr(tool, "temp_dir"):
                 tool.temp_dir = self.workspace_root

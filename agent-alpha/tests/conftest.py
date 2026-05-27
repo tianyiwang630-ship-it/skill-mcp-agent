@@ -34,7 +34,7 @@ if "tiktoken" not in sys.modules:
 
 
 def make_test_dir(name: str) -> Path:
-    base = PROJECT_ROOT.parent / "temp" / "test-fixtures"
+    base = PROJECT_ROOT / "temp" / "test-fixtures"
     base.mkdir(parents=True, exist_ok=True)
     path = base / f"{name}-{uuid.uuid4().hex[:8]}"
     path.mkdir(parents=True, exist_ok=True)

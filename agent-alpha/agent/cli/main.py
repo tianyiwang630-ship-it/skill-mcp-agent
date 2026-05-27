@@ -4,12 +4,15 @@ Single-agent CLI runner.
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 import shlex
 
 from agent.core.agent_runtime import AgentRuntime
+from agent.core.skill_installer import install_skill, list_skills, remove_skill
 from agent.core.session_store import SessionKind, SessionRecord, SessionStore
 from agent.core.runtime_types import RuntimeRequest
 from agent.core.session_paths import create_cli_session_paths, get_default_workspace_root
@@ -233,7 +236,73 @@ def _handle_workspace_command(
     return agent, agent.workspace_root
 
 
+def run_skill_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="agent-alpha skill")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    install_parser = subparsers.add_parser("install")
+    install_parser.add_argument("source")
+    install_parser.add_argument("--scope", choices=["project", "workspace"], default="project")
+    install_parser.add_argument("--workspace")
+    install_parser.add_argument("--name")
+    install_parser.add_argument("--force", action="store_true")
+
+    list_parser = subparsers.add_parser("list")
+    list_parser.add_argument("--scope", choices=["project", "workspace", "all"], default="all")
+    list_parser.add_argument("--workspace")
+
+    remove_parser = subparsers.add_parser("remove")
+    remove_parser.add_argument("name")
+    remove_parser.add_argument("--scope", choices=["project", "workspace"], default="project")
+    remove_parser.add_argument("--workspace")
+
+    args = parser.parse_args(argv)
+    project_root = PROJECT_ROOT.resolve()
+    workspace = Path(args.workspace).expanduser().resolve() if getattr(args, "workspace", None) else get_default_workspace_root(project_root)
+
+    try:
+        if args.command == "install":
+            result = install_skill(
+                source=args.source,
+                project_root=project_root,
+                scope=args.scope,
+                workspace=workspace,
+                name_override=args.name,
+                force=args.force,
+            )
+            print(f"Installed skill: {result.name}")
+            print(f"Scope: {result.scope}")
+            print(f"Path: {result.install_dir}")
+            print(f"Lock: {result.lock_path}")
+            return 0
+
+        if args.command == "list":
+            entries = list_skills(project_root=project_root, scope=args.scope, workspace=workspace)
+            if not entries:
+                print("No skills found.")
+                return 0
+            for entry in entries:
+                status = f" [{entry['status']}]" if entry.get("status") != "active" else ""
+                print(f"{entry['name']} ({entry['scope']}){status}: {entry['description']}")
+                print(f"  {entry['path']}")
+            return 0
+
+        if args.command == "remove":
+            removed = remove_skill(project_root=project_root, name=args.name, scope=args.scope, workspace=workspace)
+            print(f"Removed skill: {removed}")
+            return 0
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    parser.print_help()
+    return 1
+
+
 def run_single_agent_cli():
+    if len(sys.argv) > 1 and sys.argv[1] == "skill":
+        raise SystemExit(run_skill_cli(sys.argv[2:]))
+
     print("=" * 70)
     print("Agent CLI")
     print("=" * 70)

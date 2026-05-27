@@ -13,30 +13,45 @@ from typing import Any, Dict, List
 
 
 class SkillLoader:
-    """Scan skills/<name>/SKILL.md files and expose summaries/body lookups."""
+    """Scan skill directories and expose summaries/body lookups."""
 
-    def __init__(self, skills_dir: Path):
+    def __init__(self, skills_dir: Path, workspace_skills_dir: Path | None = None):
         self.skills_dir = Path(skills_dir)
+        self.workspace_skills_dir = Path(workspace_skills_dir) if workspace_skills_dir else None
         self.skills: Dict[str, Dict[str, Any]] = {}
+        self.reload()
+
+    @property
+    def skill_roots(self) -> list[tuple[str, Path]]:
+        roots = [("project", self.skills_dir)]
+        if self.workspace_skills_dir:
+            roots.append(("workspace", self.workspace_skills_dir))
+        return roots
+
+    def set_workspace_skills_dir(self, path: Path | None) -> None:
+        self.workspace_skills_dir = Path(path) if path else None
         self.reload()
 
     def reload(self) -> None:
         """Rescan skills from disk."""
         self.skills = {}
-        if not self.skills_dir.exists():
-            return
 
-        for skill_file in sorted(self.skills_dir.rglob("SKILL.md")):
-            meta, body = self._parse_skill_file(skill_file)
-            name = meta.get("name") or skill_file.parent.name
-            description = meta.get("description")
-            if not name or not description:
+        for scope, root in self.skill_roots:
+            if not root.exists():
                 continue
-            self.skills[name] = {
-                "meta": meta,
-                "body": body,
-                "path": str(skill_file),
-            }
+
+            for skill_file in sorted(root.rglob("SKILL.md")):
+                meta, body = self._parse_skill_file(skill_file)
+                name = meta.get("name") or skill_file.parent.name
+                description = meta.get("description")
+                if not name or not description:
+                    continue
+                self.skills[name] = {
+                    "meta": meta,
+                    "body": body,
+                    "path": str(skill_file),
+                    "scope": scope,
+                }
 
     def get_summaries(self) -> List[Dict[str, str]]:
         """Return prompt-safe summaries for all skills."""
@@ -47,6 +62,7 @@ class SkillLoader:
                 "name": name,
                 "description": meta["description"],
                 "path": skill["path"],
+                "scope": skill["scope"],
             }
             if meta.get("tags"):
                 summary["tags"] = meta["tags"]

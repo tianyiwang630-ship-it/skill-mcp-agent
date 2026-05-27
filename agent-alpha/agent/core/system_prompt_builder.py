@@ -43,6 +43,7 @@ def build_system_prompt(
     skills_dir: Path,
     mcp_servers_dir: Path,
     mcp_registry_path: Path,
+    workspace_skills_dir: Path | None = None,
     task_id: Optional[str] = None,
     skill_summaries: Optional[List[Dict[str, str]]] = None,
     prompt_documents: Optional[List[Dict[str, str]]] = None,
@@ -52,6 +53,7 @@ def build_system_prompt(
     skills_section = _build_skill_lines(skill_summaries)
     prompt_docs_section = _build_prompt_documents_section(prompt_documents)
     logs_line = str(logs_dir) if logs_dir else "(not provided by runner)"
+    workspace_skills_line = str(workspace_skills_dir) if workspace_skills_dir else "(not configured)"
 
     return f"""You are an agent running inside agent-alpha.
 
@@ -60,7 +62,8 @@ def build_system_prompt(
 Workspace root: {workspace_root}
 
 ## System Resource Paths
-Skills directory: {skills_dir}
+Project skills directory: {skills_dir}
+Workspace skills directory: {workspace_skills_line}
 MCP servers directory: {mcp_servers_dir}
 MCP registry: {mcp_registry_path}
 
@@ -72,6 +75,8 @@ Logs directory: {logs_line}
 - Do not scan nested folders for AGENTS.md or SOUL.md.
 - This workspace is the agent instance's dedicated workspace. It may contain persona docs, private reference materials, and active work files.
 - The user may reference other folders by explicit paths in the conversation.
+- When the user asks to install a skill without naming a target, install it to the project skills directory.
+- When the user asks to install a skill for the current workspace or this agent instance, install it to the workspace skills directory.
 - Skill bodies are loaded on demand with `load_skill`; do not assume a skill's full content before loading it.
 - System resource paths are primarily for reading and reference. Modify `skills` or `mcp-servers` only when the task explicitly requires maintaining those resources.
 - Update the MCP registry only when MCP registration or categorization truly needs to change.

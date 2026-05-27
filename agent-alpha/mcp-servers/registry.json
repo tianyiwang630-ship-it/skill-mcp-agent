@@ -1,5 +1,4 @@
 {
   "_comment": "MCP 分类管理。category: core(常驻上下文) / searchable(按需搜索)。alias: 中文别名（可选）。不在此文件中的 server 默认 searchable。",
-  "playwright":         { "category": "core" },
   "open-websearch":     { "category": "core" }
 }

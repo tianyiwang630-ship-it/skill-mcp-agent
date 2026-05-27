@@ -53,7 +53,7 @@ class AgentRuntime:
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
         self.llm = LLMClient.from_profile(llm_profile_name)
-        self.skill_loader = SkillLoader(PROJECT_ROOT / "skills")
+        self.skill_loader = SkillLoader(PROJECT_ROOT / "skills", self.workspace_root / "skills")
         self.tool_loader = ToolLoader(
             project_root=PROJECT_ROOT,
             skill_loader=self.skill_loader,
@@ -84,6 +84,7 @@ class AgentRuntime:
             workspace_root=self.workspace_root,
             logs_dir=self.runtime_logs_dir,
             skills_dir=PROJECT_ROOT / "skills",
+            workspace_skills_dir=self.workspace_root / "skills",
             mcp_servers_dir=PROJECT_ROOT / "mcp-servers",
             mcp_registry_path=PROJECT_ROOT / "mcp-servers" / "registry.json",
             task_id=self.task_id,

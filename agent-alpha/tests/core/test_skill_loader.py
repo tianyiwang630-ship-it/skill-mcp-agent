@@ -38,6 +38,7 @@ Step 2: extract content
                 "description": "Process PDF files",
                 "tags": "docs, files",
                 "path": str(skill_dir / "SKILL.md"),
+                "scope": "project",
             }
         ]
         assert loader.get_content("pdf") == (
@@ -72,5 +73,48 @@ Review carefully.
 
         assert "Unknown skill 'pdf'" in missing
         assert "review" in missing
+    finally:
+        cleanup_test_dir(tmp_dir)
+
+
+def test_skill_loader_prefers_workspace_skill_over_project_skill():
+    tmp_dir = make_test_dir("skill-loader")
+    try:
+        project_skills = tmp_dir / "project" / "skills"
+        workspace_skills = tmp_dir / "workspace" / "skills"
+        project_skill = project_skills / "shared"
+        workspace_skill = workspace_skills / "shared"
+        project_skill.mkdir(parents=True)
+        workspace_skill.mkdir(parents=True)
+        (project_skill / "SKILL.md").write_text(
+            """---
+name: shared
+description: Project version
+---
+Project body.
+""",
+            encoding="utf-8",
+        )
+        (workspace_skill / "SKILL.md").write_text(
+            """---
+name: shared
+description: Workspace version
+---
+Workspace body.
+""",
+            encoding="utf-8",
+        )
+
+        loader = SkillLoader(project_skills, workspace_skills)
+
+        assert loader.get_summaries() == [
+            {
+                "name": "shared",
+                "description": "Workspace version",
+                "path": str(workspace_skill / "SKILL.md"),
+                "scope": "workspace",
+            }
+        ]
+        assert "Workspace body." in loader.get_content("shared")
     finally:
         cleanup_test_dir(tmp_dir)
