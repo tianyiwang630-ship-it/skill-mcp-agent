@@ -374,7 +374,10 @@ class ToolLoader:
             try:
                 module = importlib.import_module(module_path)
                 tool_class = getattr(module, class_name)
-                tool_instance = tool_class(**init_kwargs)
+                kwargs = dict(init_kwargs)
+                if class_name == "BashTool":
+                    kwargs["project_root"] = self.project_root
+                tool_instance = tool_class(**kwargs)
                 self.tools.append(tool_instance.get_tool_definition())
                 self.tool_executors[tool_instance.name] = tool_instance.execute
                 self.tool_instances[tool_instance.name] = tool_instance
@@ -384,7 +387,11 @@ class ToolLoader:
 
     def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """Execute a tool after optional permission checks."""
-        sandbox_result = self.sandbox_guard.check_tool_call(tool_name, arguments)
+        sandbox_result = self.sandbox_guard.check_tool_call(
+            tool_name,
+            arguments,
+            auto_mode=self._auto_mode_enabled(),
+        )
         if sandbox_result.decision == "deny":
             error = {
                 "error": "Sandbox denied",
@@ -430,6 +437,13 @@ class ToolLoader:
             return executor(**arguments)
 
         return {"error": f"Unknown tool: {tool_name}"}
+
+    def _auto_mode_enabled(self) -> bool:
+        return bool(
+            self.enable_permissions
+            and self.permission_manager
+            and getattr(self.permission_manager, "mode", "") == "auto"
+        )
 
     def get_tools(self) -> List[Dict[str, Any]]:
         """Return the currently registered tools."""

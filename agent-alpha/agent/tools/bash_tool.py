@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import platform
 import subprocess
+from pathlib import Path
 from typing import Any, Dict
 
+from agent.core.runtime_env import redact_secrets, subprocess_env
 from agent.tools.base_tool import BaseTool
 
 
@@ -16,8 +18,9 @@ class BashTool(BaseTool):
     def name(self) -> str:
         return "bash"
 
-    def __init__(self, timeout: int = 300):
+    def __init__(self, timeout: int = 300, project_root: Path | None = None):
         self.timeout = timeout
+        self.project_root = Path(project_root).resolve() if project_root else Path(__file__).resolve().parents[2]
         self._detect_shell()
 
     def _detect_shell(self) -> None:
@@ -122,6 +125,7 @@ class BashTool(BaseTool):
                 errors="replace",
                 timeout=self.timeout,
                 cwd=None,
+                env=subprocess_env(self.project_root),
             )
 
             max_output_length = 50000
@@ -136,10 +140,10 @@ class BashTool(BaseTool):
 
             return {
                 "success": result.returncode == 0,
-                "stdout": stdout,
-                "stderr": stderr,
+                "stdout": redact_secrets(stdout, self.project_root),
+                "stderr": redact_secrets(stderr, self.project_root),
                 "returncode": result.returncode,
-                "command": command,
+                "command": redact_secrets(command, self.project_root),
             }
 
         except subprocess.TimeoutExpired:

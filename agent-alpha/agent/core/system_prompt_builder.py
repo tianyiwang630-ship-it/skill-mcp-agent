@@ -80,7 +80,11 @@ Logs directory: {logs_line}
 - The user may reference other folders by explicit paths in the conversation.
 - When the user asks to install a skill without naming a target, install it to the project skills directory.
 - When the user asks to install a skill for the current workspace or this agent instance, install it to the workspace skills directory.
+- When the user gives a skill repository or URL, inspect the source first, read README/INSTALL-style local docs surfaced by inspection, then present the install and dependency plan before installing.
+- Do not infer or run dependency installation commands without explicit user confirmation.
 - For Python package installs needed by agent-alpha, prefer `uv pip install --python <Runtime Python> ...` over bare `pip install` so the package lands in the same environment the agent runs.
+- Runtime env profile: when the user provides a token, API key, cookie, auth header, or similar credential while installing, configuring, testing, or enabling a skill, CLI, MCP server, or external service, treat it as configuration for future use unless the user explicitly says it is temporary. Save it only to `config/runtime_env.local.json` under the agent-alpha project, using an `env` object, and never write secrets to logs, summaries, command previews, shell profiles, system environment variables, or user-global config.
+- If the user explicitly says a credential is temporary or one-time only, use it only for that command/session and do not save it to the runtime env profile.
 - Skill bodies are loaded on demand with `load_skill`; do not assume a skill's full content before loading it.
 - System resource paths are primarily for reading and reference. Modify `skills` or `mcp-servers` only when the task explicitly requires maintaining those resources.
 - Update the MCP registry only when MCP registration or categorization truly needs to change.

@@ -40,6 +40,43 @@ def test_tool_loader_asks_user_for_project_write_and_allows_once():
     assert result["details"]["file_path"] == "D:/demo/agent-alpha/README.md"
 
 
+def test_tool_loader_auto_mode_allows_alpha_runtime_writes_without_prompt():
+    loader = ToolLoader(
+        project_root=Path("D:/demo/agent-alpha"),
+        enable_permissions=True,
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
+    )
+    loader.permission_manager.mode = "auto"
+    loader.tool_executors["write"] = lambda **kwargs: {"success": True, "details": kwargs}
+
+    with patch.object(loader.permission_manager, "ask_user", side_effect=AssertionError("should not prompt")):
+        result = loader.execute_tool(
+            "write",
+            {"file_path": "D:/demo/agent-alpha/config/runtime_env.local.json", "content": "{}"},
+        )
+
+    assert result["success"] is True
+
+
+def test_tool_loader_auto_mode_still_asks_for_core_writes():
+    loader = ToolLoader(
+        project_root=Path("D:/demo/agent-alpha"),
+        enable_permissions=True,
+        workspace_root=Path("D:/demo/agent-alpha/workspace"),
+    )
+    loader.permission_manager.mode = "auto"
+    loader.tool_executors["write"] = lambda **kwargs: {"success": True, "details": kwargs}
+
+    with patch.object(loader.permission_manager, "ask_user", return_value=False) as ask:
+        result = loader.execute_tool(
+            "write",
+            {"file_path": "D:/demo/agent-alpha/agent/core/sandbox_guard.py", "content": "x"},
+        )
+
+    assert ask.called
+    assert result["error"] == "Permission denied by user"
+
+
 def test_tool_loader_returns_retry_context_when_user_supplies_extra_instruction():
     loader = ToolLoader(
         project_root=Path("D:/demo/agent-alpha"),

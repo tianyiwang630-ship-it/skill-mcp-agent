@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Union
 
+from agent.core.runtime_env import redact_secrets
+
 
 class PermissionManager:
     """Permission manager focused on one-time user approval prompts."""
@@ -64,7 +66,7 @@ class PermissionManager:
 
         # 显示详细信息
         if tool == "bash":
-            print(f"命令: {args.get('command', '')}")
+            print(f"命令: {redact_secrets(args.get('command', ''), self.config_path.parents[2])}")
         elif tool in ["read", "write", "edit"]:
             print(f"文件: {args.get('file_path', '')}")
         elif tool in ["glob", "grep"]:

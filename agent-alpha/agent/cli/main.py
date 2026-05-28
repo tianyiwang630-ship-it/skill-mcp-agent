@@ -6,13 +6,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 import shlex
 
 from agent.core.agent_runtime import AgentRuntime
-from agent.core.skill_installer import install_skill, list_skills, remove_skill
+from agent.core.runtime_env import subprocess_env
+from agent.core.skill_installer import inspect_skill_source, install_skill, list_skills, remove_skill
 from agent.core.session_store import SessionKind, SessionRecord, SessionStore
 from agent.core.runtime_types import RuntimeRequest
 from agent.core.session_paths import create_cli_session_paths, get_default_workspace_root
@@ -245,7 +247,16 @@ def run_skill_cli(argv: list[str]) -> int:
     install_parser.add_argument("--scope", choices=["project", "workspace"], default="project")
     install_parser.add_argument("--workspace")
     install_parser.add_argument("--name")
+    install_parser.add_argument("--namespace")
+    install_parser.add_argument("--all", action="store_true")
+    install_parser.add_argument("--with-deps", action="store_true")
+    install_parser.add_argument("--dry-run", action="store_true")
     install_parser.add_argument("--force", action="store_true")
+
+    inspect_parser = subparsers.add_parser("inspect")
+    inspect_parser.add_argument("source")
+    inspect_parser.add_argument("--name")
+    inspect_parser.add_argument("--namespace")
 
     list_parser = subparsers.add_parser("list")
     list_parser.add_argument("--scope", choices=["project", "workspace", "all"], default="all")
@@ -268,12 +279,58 @@ def run_skill_cli(argv: list[str]) -> int:
                 scope=args.scope,
                 workspace=workspace,
                 name_override=args.name,
+                namespace=args.namespace,
+                install_all=args.all,
+                with_deps=args.with_deps,
+                dry_run=args.dry_run,
                 force=args.force,
             )
-            print(f"Installed skill: {result.name}")
+            action = "Dry run skill install" if result.dry_run else "Installed skill"
+            print(f"{action}: {result.name}")
             print(f"Scope: {result.scope}")
-            print(f"Path: {result.install_dir}")
-            print(f"Lock: {result.lock_path}")
+            if result.namespace:
+                print(f"Namespace: {result.namespace}")
+            if result.skills:
+                print("Skills:")
+                for skill_name in result.skills:
+                    print(f"  - {skill_name}")
+            if result.install_dirs:
+                print("Paths:")
+                for install_dir in result.install_dirs:
+                    print(f"  - {install_dir}")
+            if result.dependency_commands:
+                print("Dependency commands:")
+                for command in result.dependency_commands:
+                    print(f"  - [{command.kind}] {command.command}")
+                if args.with_deps and not args.dry_run:
+                    _maybe_execute_dependency_commands(result)
+            if result.lock_path:
+                print(f"Lock: {result.lock_path}")
+            return 0
+
+        if args.command == "inspect":
+            result = inspect_skill_source(
+                source=args.source,
+                project_root=project_root,
+                name_override=args.name,
+                namespace=args.namespace,
+            )
+            print(f"Source: {result.source}")
+            print(f"Kind: {result.kind}")
+            if result.namespace:
+                print(f"Namespace: {result.namespace}")
+            print("Skill candidates:")
+            for candidate in result.candidates:
+                print(f"  - {candidate.install_name}: {candidate.description}")
+                print(f"    {candidate.relative_path}")
+            if result.docs:
+                print("Install docs:")
+                for doc in result.docs:
+                    print(f"  - {doc.relative_path}")
+            if result.dependency_commands:
+                print("Dependency commands:")
+                for command in result.dependency_commands:
+                    print(f"  - [{command.kind}] {command.command}")
             return 0
 
         if args.command == "list":
@@ -297,6 +354,23 @@ def run_skill_cli(argv: list[str]) -> int:
 
     parser.print_help()
     return 1
+
+
+def _maybe_execute_dependency_commands(result) -> None:
+    print("\nDependency commands require confirmation.")
+    choice = input("Run dependency commands now? [y/N]: ").strip().lower()
+    if choice not in {"y", "yes"}:
+        print("Skipped dependency command execution.")
+        return
+    for command in result.dependency_commands:
+        cwd = None
+        if command.kind == "node":
+            cwd = result.install_dir
+            if cwd is None or not cwd.exists():
+                raise RuntimeError(f"Cannot choose a skill directory for Node command: {command.command}")
+        completed = subprocess.run(command.command, shell=True, cwd=cwd, env=subprocess_env(PROJECT_ROOT))
+        if completed.returncode != 0:
+            raise RuntimeError(f"Dependency command failed: {command.command}")
 
 
 def run_single_agent_cli():

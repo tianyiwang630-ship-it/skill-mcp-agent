@@ -118,3 +118,38 @@ Workspace body.
         assert "Workspace body." in loader.get_content("shared")
     finally:
         cleanup_test_dir(tmp_dir)
+
+
+def test_skill_loader_uses_namespace_for_nested_pack_skills():
+    tmp_dir = make_test_dir("skill-loader")
+    try:
+        skills_dir = tmp_dir / "skills"
+        skill_dir = skills_dir / "superpowers" / "brainstorming"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: brainstorming
+description: Explore before building
+---
+Ask better questions.
+""",
+            encoding="utf-8",
+        )
+
+        loader = SkillLoader(skills_dir)
+
+        assert loader.get_summaries() == [
+            {
+                "name": "superpowers:brainstorming",
+                "description": "Explore before building",
+                "path": str(skill_dir / "SKILL.md"),
+                "scope": "project",
+            }
+        ]
+        assert loader.get_content("superpowers:brainstorming") == (
+            '<skill name="superpowers:brainstorming">\n'
+            "Ask better questions.\n"
+            "</skill>"
+        )
+    finally:
+        cleanup_test_dir(tmp_dir)

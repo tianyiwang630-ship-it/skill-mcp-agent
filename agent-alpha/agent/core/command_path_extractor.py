@@ -9,7 +9,7 @@ from agent.core.sandbox_types import AccessAction, BashCategory
 
 
 READ_ONLY_SINGLE_COMMANDS = {"pwd"}
-READ_ONLY_PATH_COMMANDS = {"ls", "dir", "cat", "type", "rg", "grep", "find"}
+READ_ONLY_PATH_COMMANDS = {"ls", "dir", "cat", "type", "get-content", "rg", "grep", "find"}
 READ_ONLY_LOOKUP_COMMANDS = {"which", "where", "get-command", "test-path"}
 VERSION_COMMANDS = {
     "python",
@@ -61,8 +61,10 @@ DANGEROUS_COMMANDS = {
     "runas",
     "format",
     "mkfs",
+    "dd",
     "diskpart",
     "shutdown",
+    "setx",
     "reboot",
     "restart-computer",
     "stop-computer",
@@ -94,7 +96,28 @@ DANGEROUS_POWERSHELL_ADMIN = {
     "sc",
     "netsh",
 }
-MUTATION_COMMANDS = {"mkdir", "cp", "mv", "rm", "del", "rmdir", "touch", "tee", "sed", "echo", "git"}
+MUTATION_COMMANDS = {
+    "mkdir",
+    "cp",
+    "copy",
+    "copy-item",
+    "mv",
+    "move",
+    "move-item",
+    "rm",
+    "del",
+    "rd",
+    "rmdir",
+    "remove-item",
+    "touch",
+    "tee",
+    "sed",
+    "echo",
+    "set-content",
+    "add-content",
+    "new-item",
+    "git",
+}
 CONTROL_OPERATORS = ("&&", "||", ";", "$(", "`")
 CHAIN_OPERATORS = {"&&", "||", ";"}
 
@@ -209,7 +232,7 @@ def _extract_read_only_paths(command: str) -> tuple[AccessAction, list[Path]] | 
         paths = [path for path in paths if path is not None]
         return "read", paths
 
-    if first in {"cat", "type"}:
+    if first in {"cat", "type", "get-content"}:
         paths = [_resolve_path(_strip_quotes(token)) for token in tokens[1:] if not token.startswith("-")]
         if not paths:
             return None
@@ -258,11 +281,11 @@ def _extract_mutation_paths(command: str) -> tuple[AccessAction, list[Path]] | N
         paths = _non_flag_paths(args)
         return ("write", paths) if len(paths) == 1 else None
 
-    if command_name in {"cp", "mv"}:
+    if command_name in {"cp", "mv", "copy", "move", "copy-item", "move-item"}:
         paths = _non_flag_paths(args)
         return ("write", paths) if len(paths) == 2 else None
 
-    if command_name in {"rm", "del", "rmdir"}:
+    if command_name in {"rm", "del", "rd", "rmdir", "remove-item"}:
         paths = _non_flag_paths(args)
         return ("delete", paths) if len(paths) == 1 else None
 
@@ -275,6 +298,10 @@ def _extract_mutation_paths(command: str) -> tuple[AccessAction, list[Path]] | N
             return None
         paths = _non_flag_paths(args)
         return ("write", [paths[-1]]) if paths else None
+
+    if command_name in {"set-content", "add-content", "new-item"}:
+        paths = _non_flag_paths(args)
+        return ("write", [paths[0]]) if paths else None
 
     if command_name == "git":
         return _extract_git_mutation(args)
@@ -291,6 +318,13 @@ def _is_dangerous_command(command: str, tokens: list[str]) -> bool:
         return True
     if first in DANGEROUS_POWERSHELL_ADMIN:
         return True
+    dangerous_forwarded = DANGEROUS_COMMANDS | DANGEROUS_POWERSHELL_ADMIN | DANGEROUS_POWERSHELL_MUTATIONS
+    if first in {"powershell", "pwsh", "cmd"} and any(_command_name(token) in dangerous_forwarded for token in tokens[1:]):
+        return True
+    if first in {"powershell", "pwsh", "cmd"}:
+        lowered_command = command.lower()
+        if any(name in lowered_command for name in dangerous_forwarded):
+            return True
     if first in DANGEROUS_POWERSHELL_MUTATIONS:
         lowered_tokens = {token.lower() for token in tokens[1:]}
         lowered_command = command.lower()
@@ -299,8 +333,28 @@ def _is_dangerous_command(command: str, tokens: list[str]) -> bool:
         if any(target in lowered_command for target in [" c:\\", " c:/", " $env:userprofile", " $home", " ~"]):
             return True
 
+    if first in {"rm", "rmdir", "rd", "del"}:
+        lowered_tokens = {token.lower() for token in tokens[1:]}
+        lowered_command = command.lower()
+        if any(flag in lowered_tokens for flag in {"-rf", "-fr", "/s", "/q"}) or (
+            "-r" in lowered_tokens and "-f" in lowered_tokens
+        ):
+            return True
+        if any(target in lowered_command for target in [" c:\\", " c:/", " /", " ~", " %userprofile%", " %home%"]):
+            return True
+
+    if first in {"curl", "wget", "iwr", "invoke-webrequest"} and "|" in command:
+        lowered_command = command.lower()
+        if any(shell in lowered_command for shell in ["bash", "sh", "powershell", "pwsh", "cmd"]):
+            return True
+
     normalized = " ".join(token.lower() for token in tokens)
-    return "rm -rf /" in normalized or "rm -fr /" in normalized or normalized.startswith("git clean -fd")
+    return (
+        "rm -rf /" in normalized
+        or "rm -fr /" in normalized
+        or normalized.startswith("git clean -fd")
+        or normalized.startswith("git reset --hard")
+    )
 
 
 def _is_package_install(tokens: list[str]) -> bool:
@@ -398,12 +452,20 @@ def _resolve_path(raw_path: str) -> Path | None:
 def _non_flag_paths(args: Iterable[str]) -> list[Path]:
     paths = []
     for arg in args:
-        if arg.startswith("-"):
+        if _is_flag_arg(arg):
             continue
         path = _resolve_path(_strip_quotes(arg))
         if path is not None:
             paths.append(path)
     return paths
+
+
+def _is_flag_arg(arg: str) -> bool:
+    if arg.startswith("-"):
+        return True
+    if arg.startswith("/") and len(arg) <= 3 and not re.match(r"^/[A-Za-z0-9_.-]+(?:/|\\)", arg):
+        return True
+    return False
 
 
 def _extract_last_non_flag_path(args: Iterable[str]) -> Path | None:

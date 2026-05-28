@@ -69,6 +69,7 @@ logs/
 # 环境变量
 .env
 .env.local
+config/runtime_env.local.json
 
 # 系统文件
 .DS_Store

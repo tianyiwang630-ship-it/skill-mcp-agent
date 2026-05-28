@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import shutil
 import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
+from dataclasses import field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,40 @@ from typing import Any
 VALID_SKILL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
 GITHUB_TREE_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+)$")
 GITHUB_PATH_RE = re.compile(r"^([^/\s]+)/([^/\s]+)/(.+)$")
+GITHUB_REPO_URL_RE = re.compile(r"^https://github\.com/([^/]+)/([^/#?]+?)(?:\.git)?/?(?:[#?].*)?$")
+GITHUB_REPO_SHORT_RE = re.compile(r"^([^/\s]+)/([^/\s]+)$")
+MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+\.md(?:#[^)]+)?)\)", re.IGNORECASE)
+
+
+@dataclass(slots=True)
+class SkillCandidate:
+    name: str
+    description: str
+    relative_path: str
+    install_name: str
+
+
+@dataclass(slots=True)
+class SkillDocument:
+    relative_path: str
+    content: str
+
+
+@dataclass(slots=True)
+class DependencyCommand:
+    command: str
+    kind: str
+    cwd_hint: str
+
+
+@dataclass(slots=True)
+class SkillInspectResult:
+    source: str
+    kind: str
+    namespace: str | None
+    candidates: list[SkillCandidate]
+    docs: list[SkillDocument]
+    dependency_commands: list[DependencyCommand]
 
 
 @dataclass(slots=True)
@@ -24,8 +60,40 @@ class SkillInstallResult:
     name: str
     scope: str
     source: str
-    install_dir: Path
-    lock_path: Path
+    install_dir: Path | None
+    lock_path: Path | None
+    install_dirs: list[Path] = field(default_factory=list)
+    namespace: str | None = None
+    skills: list[str] = field(default_factory=list)
+    dependency_commands: list[DependencyCommand] = field(default_factory=list)
+    docs: list[SkillDocument] = field(default_factory=list)
+    dry_run: bool = False
+
+
+def inspect_skill_source(
+    *,
+    source: str,
+    project_root: Path,
+    name_override: str | None = None,
+    namespace: str | None = None,
+) -> SkillInspectResult:
+    """Inspect a skill source without installing it."""
+    project_root = Path(project_root).resolve()
+    cache_root = project_root / "temp" / "skill-installer"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    cache_dir = cache_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{_slug_for_cache(source)}"
+    cache_dir.mkdir(parents=True, exist_ok=False)
+
+    try:
+        staged_dir = _stage_source(source=source, cache_dir=cache_dir, name_override=name_override)
+        return _inspect_staged_source(
+            staged_dir=staged_dir,
+            source=source,
+            name_override=name_override,
+            namespace=namespace,
+        )
+    finally:
+        shutil.rmtree(cache_dir, ignore_errors=True)
 
 
 def install_skill(
@@ -35,6 +103,10 @@ def install_skill(
     scope: str = "project",
     workspace: Path | None = None,
     name_override: str | None = None,
+    namespace: str | None = None,
+    install_all: bool = False,
+    with_deps: bool = False,
+    dry_run: bool = False,
     force: bool = False,
 ) -> SkillInstallResult:
     """Install a skill from a local path, GitHub path, raw SKILL.md URL, or zip URL."""
@@ -49,36 +121,45 @@ def install_skill(
 
     try:
         staged_dir = _stage_source(source=source, cache_dir=cache_dir, name_override=name_override)
-        skill_dir, meta = _validate_staged_skill(staged_dir, name_override=name_override)
-        skill_name = name_override or meta.get("name") or skill_dir.name
-        if not skill_name or not VALID_SKILL_NAME.match(skill_name):
-            raise ValueError(f"Invalid skill name: {skill_name!r}")
-        if not meta.get("description"):
-            raise ValueError("SKILL.md must include a description field in frontmatter.")
+        inspection = _inspect_staged_source(
+            staged_dir=staged_dir,
+            source=source,
+            name_override=name_override,
+            namespace=namespace,
+        )
+        dependency_commands = inspection.dependency_commands if with_deps or dry_run else []
+        docs = inspection.docs if with_deps or dry_run else []
 
         target_root.mkdir(parents=True, exist_ok=True)
-        install_dir = target_root / skill_name
-        if install_dir.exists() and not force:
-            raise FileExistsError(f"Skill already exists: {install_dir}. Use --force to replace it.")
-        if install_dir.exists():
-            shutil.rmtree(install_dir)
 
-        shutil.move(str(skill_dir), str(install_dir))
-        lock_path = _write_lock(
-            target_root=target_root,
-            name=skill_name,
-            scope=scope,
-            source=source,
-            install_dir=install_dir,
-        )
+        if inspection.kind == "pack":
+            if not install_all and name_override is None:
+                raise ValueError("Multiple SKILL.md files found. Use --name to select one skill or --all to install the pack.")
+            result = _install_pack(
+                staged_dir=staged_dir,
+                target_root=target_root,
+                scope=scope,
+                source=source,
+                inspection=inspection,
+                force=force,
+                dry_run=dry_run,
+                dependency_commands=dependency_commands,
+                docs=docs,
+            )
+        else:
+            result = _install_single(
+                staged_dir=staged_dir,
+                target_root=target_root,
+                scope=scope,
+                source=source,
+                inspection=inspection,
+                force=force,
+                dry_run=dry_run,
+                dependency_commands=dependency_commands,
+                docs=docs,
+            )
         shutil.rmtree(cache_dir, ignore_errors=True)
-        return SkillInstallResult(
-            name=skill_name,
-            scope=scope,
-            source=source,
-            install_dir=install_dir,
-            lock_path=lock_path,
-        )
+        return result
     except Exception:
         raise
 
@@ -95,7 +176,7 @@ def list_skills(*, project_root: Path, scope: str = "all", workspace: Path | Non
             continue
         for skill_md in sorted(root.rglob("SKILL.md")):
             meta = parse_skill_frontmatter(skill_md)
-            name = meta.get("name") or skill_md.parent.name
+            name = _installed_skill_name(root, skill_md, meta)
             if not meta.get("description"):
                 continue
             status = "active"
@@ -115,16 +196,36 @@ def list_skills(*, project_root: Path, scope: str = "all", workspace: Path | Non
     return entries
 
 
+def _installed_skill_name(root: Path, skill_md: Path, meta: dict[str, str]) -> str:
+    name = meta.get("name") or skill_md.parent.name
+    try:
+        relative = skill_md.relative_to(root)
+    except ValueError:
+        return name
+    if len(relative.parts) >= 3:
+        namespace = relative.parts[0]
+        if VALID_SKILL_NAME.match(namespace):
+            return f"{namespace}:{name}"
+    return name
+
+
 def remove_skill(*, project_root: Path, name: str, scope: str = "project", workspace: Path | None = None) -> Path:
     if scope == "all":
         raise ValueError("Remove requires --scope project or --scope workspace.")
-    if not VALID_SKILL_NAME.match(name):
+    if ":" in name:
+        namespace, skill_name = name.split(":", 1)
+        if not VALID_SKILL_NAME.match(namespace) or not VALID_SKILL_NAME.match(skill_name):
+            raise ValueError(f"Invalid skill name: {name!r}")
+        path_parts = [namespace, skill_name]
+    elif not VALID_SKILL_NAME.match(name):
         raise ValueError(f"Invalid skill name: {name!r}")
+    else:
+        path_parts = [name]
 
     project_root = Path(project_root).resolve()
     workspace = Path(workspace).resolve() if workspace else project_root / "workspace"
     target_root = _target_root(project_root=project_root, workspace=workspace, scope=scope)
-    target = target_root / name
+    target = target_root.joinpath(*path_parts)
     if not target.exists():
         raise FileNotFoundError(f"Skill not found: {target}")
     shutil.rmtree(target)
@@ -175,6 +276,10 @@ def _stage_source(*, source: str, cache_dir: Path, name_override: str | None) ->
         parsed = urllib.parse.urlparse(source)
         if parsed.netloc.lower() == "github.com" and "/tree/" in parsed.path:
             return _download_github_tree(source, cache_dir)
+        repo_match = GITHUB_REPO_URL_RE.match(source)
+        if repo_match:
+            owner, repo = repo_match.groups()
+            return _download_github_repo(owner, repo, cache_dir)
         if parsed.path.lower().endswith(".zip"):
             return _download_zip(source, cache_dir)
         if parsed.path.endswith("SKILL.md"):
@@ -185,6 +290,11 @@ def _stage_source(*, source: str, cache_dir: Path, name_override: str | None) ->
     if match:
         owner, repo, path = match.groups()
         return _download_github_directory(owner, repo, "", path, cache_dir)
+
+    repo_match = GITHUB_REPO_SHORT_RE.match(source)
+    if repo_match:
+        owner, repo = repo_match.groups()
+        return _download_github_repo(owner, repo, cache_dir)
 
     raise ValueError("Unsupported source. Use a local directory, GitHub path, raw SKILL.md URL, or zip URL.")
 
@@ -215,8 +325,16 @@ def _download_zip(source: str, cache_dir: Path) -> Path:
     extract_dir = cache_dir / "zip"
     _download_file(source, zip_path)
     with zipfile.ZipFile(zip_path) as archive:
-        archive.extractall(extract_dir)
+        _safe_extract_zip(archive, extract_dir)
     return extract_dir
+
+
+def _download_github_repo(owner: str, repo: str, cache_dir: Path) -> Path:
+    dest = cache_dir / repo
+    dest.mkdir()
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/"
+    _download_github_contents(api_url, dest)
+    return dest
 
 
 def _download_github_tree(source: str, cache_dir: Path) -> Path:
@@ -225,6 +343,15 @@ def _download_github_tree(source: str, cache_dir: Path) -> Path:
         raise ValueError("Invalid GitHub tree URL.")
     owner, repo, ref, path = match.groups()
     return _download_github_directory(owner, repo, ref, path, cache_dir)
+
+
+def _safe_extract_zip(archive: zipfile.ZipFile, extract_dir: Path) -> None:
+    extract_root = extract_dir.resolve()
+    for member in archive.infolist():
+        target = (extract_dir / member.filename).resolve()
+        if target != extract_root and extract_root not in target.parents:
+            raise ValueError(f"Unsafe zip path: {member.filename}")
+    archive.extractall(extract_dir)
 
 
 def _download_github_directory(owner: str, repo: str, ref: str, path: str, cache_dir: Path) -> Path:
@@ -259,34 +386,355 @@ def _download_github_contents(api_url: str, dest: Path) -> None:
             _download_file(item["download_url"], dest / name)
 
 
-def _validate_staged_skill(staged_dir: Path, *, name_override: str | None) -> tuple[Path, dict[str, str]]:
-    candidates = sorted(staged_dir.rglob("SKILL.md"))
-    if not candidates:
+def _inspect_staged_source(
+    *,
+    staged_dir: Path,
+    source: str,
+    name_override: str | None,
+    namespace: str | None,
+) -> SkillInspectResult:
+    skill_files = sorted(staged_dir.rglob("SKILL.md"))
+    if not skill_files:
         raise ValueError("No SKILL.md found in source.")
+    all_candidates = _find_skill_candidates(staged_dir)
+    if not all_candidates:
+        raise ValueError("SKILL.md must include a description field in frontmatter.")
 
+    selected = _select_candidates(staged_dir, all_candidates, name_override=name_override)
+    is_pack = len(selected) > 1
+    resolved_namespace = _validate_namespace(namespace or (_infer_namespace(staged_dir) if is_pack else None))
+    candidates = [
+        _candidate_from_skill_file(staged_dir, skill_file, namespace=resolved_namespace if is_pack else None)
+        for skill_file in selected
+    ]
+    docs = _collect_install_docs(staged_dir)
+    dependency_commands = _extract_dependency_commands(docs)
+
+    return SkillInspectResult(
+        source=source,
+        kind="pack" if is_pack else "single",
+        namespace=resolved_namespace,
+        candidates=candidates,
+        docs=docs,
+        dependency_commands=dependency_commands,
+    )
+
+
+def _find_skill_candidates(staged_dir: Path) -> list[Path]:
+    candidates = []
+    for skill_file in sorted(staged_dir.rglob("SKILL.md")):
+        meta = parse_skill_frontmatter(skill_file)
+        if meta.get("description"):
+            candidates.append(skill_file)
+    return candidates
+
+
+def _select_candidates(staged_dir: Path, candidates: list[Path], *, name_override: str | None) -> list[Path]:
     if name_override:
         named = [
             path
             for path in candidates
             if path.parent.name == name_override or parse_skill_frontmatter(path).get("name") == name_override
         ]
-        skill_file = named[0] if named else candidates[0]
-    elif len(candidates) == 1:
-        skill_file = candidates[0]
-    else:
-        direct = staged_dir / "SKILL.md"
-        if direct.exists():
-            skill_file = direct
-        else:
-            raise ValueError("Multiple SKILL.md files found. Use --name to select the target skill.")
+        if not named:
+            raise ValueError(f"No skill named {name_override!r} found in source.")
+        return [named[0]]
 
+    direct = staged_dir / "SKILL.md"
+    if direct in candidates:
+        return [direct]
+    return candidates
+
+
+def _candidate_from_skill_file(staged_dir: Path, skill_file: Path, *, namespace: str | None) -> SkillCandidate:
     meta = parse_skill_frontmatter(skill_file)
-    if not meta.get("name") and name_override is None and skill_file.parent.name == "raw-skill":
-        raise ValueError("Raw SKILL.md sources must include a name field or use --name.")
-    return skill_file.parent, meta
+    skill_name = meta.get("name") or skill_file.parent.name
+    if not VALID_SKILL_NAME.match(skill_name):
+        raise ValueError(f"Invalid skill name: {skill_name!r}")
+    install_name = f"{namespace}:{skill_name}" if namespace else skill_name
+    return SkillCandidate(
+        name=skill_name,
+        description=meta["description"],
+        relative_path=_relative_posix(skill_file, staged_dir),
+        install_name=install_name,
+    )
 
 
-def _write_lock(*, target_root: Path, name: str, scope: str, source: str, install_dir: Path) -> Path:
+def _install_single(
+    *,
+    staged_dir: Path,
+    target_root: Path,
+    scope: str,
+    source: str,
+    inspection: SkillInspectResult,
+    force: bool,
+    dry_run: bool,
+    dependency_commands: list[DependencyCommand],
+    docs: list[SkillDocument],
+) -> SkillInstallResult:
+    candidate = inspection.candidates[0]
+    skill_dir = staged_dir / Path(candidate.relative_path).parent
+    install_dir = target_root / candidate.name
+
+    if not dry_run:
+        _ensure_replaceable(install_dir, force=force)
+        shutil.move(str(skill_dir), str(install_dir))
+        lock_path = _write_lock(
+            target_root=target_root,
+            name=candidate.name,
+            scope=scope,
+            source=source,
+            install_dirs=[install_dir],
+            namespace=None,
+            skills=[candidate.name],
+            dependency_commands=dependency_commands,
+            docs=docs,
+        )
+    else:
+        lock_path = None
+
+    return SkillInstallResult(
+        name=candidate.name,
+        scope=scope,
+        source=source,
+        install_dir=None if dry_run else install_dir,
+        install_dirs=[] if dry_run else [install_dir],
+        lock_path=lock_path,
+        namespace=None,
+        skills=[candidate.name],
+        dependency_commands=dependency_commands,
+        docs=docs,
+        dry_run=dry_run,
+    )
+
+
+def _install_pack(
+    *,
+    staged_dir: Path,
+    target_root: Path,
+    scope: str,
+    source: str,
+    inspection: SkillInspectResult,
+    force: bool,
+    dry_run: bool,
+    dependency_commands: list[DependencyCommand],
+    docs: list[SkillDocument],
+) -> SkillInstallResult:
+    namespace = inspection.namespace
+    if not namespace:
+        raise ValueError("Skill pack installation requires a namespace.")
+
+    install_dirs: list[Path] = []
+    target_namespace_dir = target_root / namespace
+    if not dry_run:
+        target_namespace_dir.mkdir(parents=True, exist_ok=True)
+
+    for candidate in inspection.candidates:
+        skill_dir = staged_dir / Path(candidate.relative_path).parent
+        install_dir = target_namespace_dir / candidate.name
+        if not dry_run:
+            _ensure_replaceable(install_dir, force=force)
+            shutil.move(str(skill_dir), str(install_dir))
+            install_dirs.append(install_dir)
+
+    lock_path = None
+    if not dry_run:
+        lock_path = _write_lock(
+            target_root=target_root,
+            name=namespace,
+            scope=scope,
+            source=source,
+            install_dirs=install_dirs,
+            namespace=namespace,
+            skills=[candidate.install_name for candidate in inspection.candidates],
+            dependency_commands=dependency_commands,
+            docs=docs,
+        )
+
+    return SkillInstallResult(
+        name=namespace,
+        scope=scope,
+        source=source,
+        install_dir=None if dry_run else target_namespace_dir,
+        install_dirs=install_dirs,
+        lock_path=lock_path,
+        namespace=namespace,
+        skills=[candidate.install_name for candidate in inspection.candidates],
+        dependency_commands=dependency_commands,
+        docs=docs,
+        dry_run=dry_run,
+    )
+
+
+def _ensure_replaceable(path: Path, *, force: bool) -> None:
+    if path.exists() and not force:
+        raise FileExistsError(f"Skill already exists: {path}. Use --force to replace it.")
+    if path.exists():
+        shutil.rmtree(path)
+
+
+def _infer_namespace(staged_dir: Path) -> str:
+    return _sanitize_name(staged_dir.name or "skills")
+
+
+def _validate_namespace(namespace: str | None) -> str | None:
+    if namespace is None:
+        return None
+    if not VALID_SKILL_NAME.match(namespace):
+        raise ValueError(f"Invalid skill namespace: {namespace!r}")
+    return namespace
+
+
+def _sanitize_name(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    if not cleaned or not cleaned[0].isalpha():
+        cleaned = f"skills-{cleaned}" if cleaned else "skills"
+    return cleaned
+
+
+def _collect_install_docs(staged_dir: Path) -> list[SkillDocument]:
+    seen: set[Path] = set()
+    docs: list[SkillDocument] = []
+    initial = [
+        path
+        for path in sorted(
+            staged_dir.rglob("*.md"),
+            key=lambda path: (len(path.relative_to(staged_dir).parts), path.relative_to(staged_dir).as_posix()),
+        )
+        if path.name.lower().startswith(("readme", "install"))
+    ]
+
+    def visit(path: Path, depth: int) -> None:
+        resolved = path.resolve()
+        if resolved in seen or not _is_within(resolved, staged_dir.resolve()) or not path.exists():
+            return
+        seen.add(resolved)
+        content = path.read_text(encoding="utf-8", errors="replace")
+        docs.append(SkillDocument(relative_path=_relative_posix(path, staged_dir), content=content))
+        if depth >= 2:
+            return
+        for raw_link in MARKDOWN_LINK_RE.findall(content):
+            linked = _resolve_local_markdown_link(path.parent, raw_link)
+            if linked is not None:
+                visit(linked, depth + 1)
+
+    for path in initial:
+        visit(path, 0)
+    return docs
+
+
+def _resolve_local_markdown_link(base_dir: Path, raw_link: str) -> Path | None:
+    parsed = urllib.parse.urlparse(raw_link.strip())
+    if parsed.scheme or parsed.netloc:
+        return None
+    path_part = urllib.parse.unquote(parsed.path).strip()
+    if not path_part:
+        return None
+    return (base_dir / path_part).resolve()
+
+
+def _extract_dependency_commands(docs: list[SkillDocument]) -> list[DependencyCommand]:
+    commands: list[DependencyCommand] = []
+    seen: set[str] = set()
+    for doc in docs:
+        for raw_command in _iter_document_commands(doc.content):
+            normalized = _normalize_dependency_command(raw_command)
+            if normalized is None:
+                continue
+            command, kind = normalized
+            if command in seen:
+                continue
+            seen.add(command)
+            commands.append(DependencyCommand(command=command, kind=kind, cwd_hint=str(Path(doc.relative_path).parent)))
+    return commands
+
+
+def _iter_document_commands(content: str) -> list[str]:
+    commands: list[str] = []
+    in_fence = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if stripped.startswith("$ "):
+            stripped = stripped[2:].strip()
+        if in_fence or _normalize_dependency_command(stripped):
+            if _normalize_dependency_command(stripped):
+                commands.append(stripped)
+    return commands
+
+
+def _normalize_dependency_command(command: str) -> tuple[str, str] | None:
+    stripped = command.strip()
+    if _has_shell_control(stripped):
+        return None
+    lowered = stripped.lower()
+    if lowered.startswith("uv tool install "):
+        return stripped, "uv-tool"
+    if lowered.startswith("uv pip install "):
+        return _normalize_uv_pip_command(stripped), "uv-pip"
+    if lowered.startswith("pip install "):
+        return _normalize_pip_command(stripped), "uv-pip"
+    if lowered.startswith(("python -m pip install ", "python3 -m pip install ", "py -m pip install ")):
+        return _normalize_python_module_pip_command(stripped), "uv-pip"
+    if lowered in {"npm install", "npm i"} or lowered.startswith(("npm install ", "npm i ")):
+        return stripped, "node"
+    if lowered == "pnpm install" or lowered.startswith(("pnpm install ", "pnpm add ")):
+        return stripped, "node"
+    if lowered == "yarn install" or lowered.startswith(("yarn install ", "yarn add ")):
+        return stripped, "node"
+    return None
+
+
+def _has_shell_control(command: str) -> bool:
+    return any(token in command for token in ("&&", "||", ";", "$(", "`", "\n"))
+
+
+def _normalize_uv_pip_command(command: str) -> str:
+    tokens = shlex.split(command, posix=False)
+    lowered = [token.lower() for token in tokens]
+    if "--python" in lowered:
+        return command
+    return _insert_python_runtime(tokens, insert_at=3)
+
+
+def _normalize_pip_command(command: str) -> str:
+    tokens = shlex.split(command, posix=False)
+    return _insert_python_runtime(["uv", "pip", "install", *tokens[2:]], insert_at=3)
+
+
+def _normalize_python_module_pip_command(command: str) -> str:
+    tokens = shlex.split(command, posix=False)
+    return _insert_python_runtime(["uv", "pip", "install", *tokens[4:]], insert_at=3)
+
+
+def _insert_python_runtime(tokens: list[str], *, insert_at: int) -> str:
+    normalized = list(tokens)
+    normalized[insert_at:insert_at] = ["--python", "<AGENT_ALPHA_PYTHON>"]
+    return " ".join(normalized)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
+def _relative_posix(path: Path, root: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def _write_lock(
+    *,
+    target_root: Path,
+    name: str,
+    scope: str,
+    source: str,
+    install_dirs: list[Path],
+    namespace: str | None,
+    skills: list[str],
+    dependency_commands: list[DependencyCommand],
+    docs: list[SkillDocument],
+) -> Path:
     lock_path = target_root / ".install-lock.json"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     data: dict[str, Any] = {"skills": {}}
@@ -297,15 +745,31 @@ def _write_lock(*, target_root: Path, name: str, scope: str, source: str, instal
                 data = loaded
         except json.JSONDecodeError:
             data = {"skills": {}}
-    skills = data.setdefault("skills", {})
-    skills[name] = {
+    lock_entries = data.setdefault("skills", {})
+    runtime_python = _runtime_python()
+    lock_entries[name] = {
         "scope": scope,
         "source": source,
-        "install_path": str(install_dir),
+        "namespace": namespace,
+        "skills": list(skills),
+        "install_paths": [str(path) for path in install_dirs],
+        "dependency_commands": [
+            {"command": command.command, "kind": command.kind, "cwd_hint": command.cwd_hint}
+            for command in dependency_commands
+        ],
+        "docs": [doc.relative_path for doc in docs],
+        "runtime_python": str(runtime_python) if runtime_python else None,
         "installed_at": datetime.now().isoformat(timespec="seconds"),
     }
     lock_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return lock_path
+
+
+def _runtime_python() -> Path | None:
+    import os
+
+    raw = os.environ.get("AGENT_ALPHA_PYTHON")
+    return Path(raw) if raw else None
 
 
 def _download_file(url: str, dest: Path) -> None:

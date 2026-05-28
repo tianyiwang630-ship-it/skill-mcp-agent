@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from typing import Any, Dict
 
@@ -26,9 +27,9 @@ class SandboxGuard:
         self.project_root = Path(project_root).resolve()
         self.workspace_root = Path(workspace_root).resolve()
 
-    def check_tool_call(self, tool_name: str, arguments: Dict[str, Any]) -> SandboxCheckResult:
+    def check_tool_call(self, tool_name: str, arguments: Dict[str, Any], *, auto_mode: bool = False) -> SandboxCheckResult:
         if tool_name == "bash":
-            return self._check_bash_command(arguments.get("command", ""))
+            return self._check_bash_command(arguments.get("command", ""), auto_mode=auto_mode)
 
         if tool_name not in self.FILE_TOOL_ACTIONS:
             return SandboxCheckResult(
@@ -45,6 +46,7 @@ class SandboxGuard:
             action=action,
             workspace_root=self.workspace_root,
             project_root=self.project_root,
+            auto_mode=auto_mode,
         )
 
         if target_path is None:
@@ -68,7 +70,7 @@ class SandboxGuard:
             reason=reason,
         )
 
-    def _check_bash_command(self, command: str) -> SandboxCheckResult:
+    def _check_bash_command(self, command: str, *, auto_mode: bool = False) -> SandboxCheckResult:
         segments = split_bash_segments(command)
         if segments is None:
             return SandboxCheckResult(
@@ -79,11 +81,11 @@ class SandboxGuard:
                 guidance="Use simple chained commands with &&, ||, or ; only when each command is safe on its own.",
             )
         if len(segments) > 1:
-            return self._check_bash_segments(segments)
-        return self._check_single_bash_command(command)
+            return self._check_bash_segments(segments, auto_mode=auto_mode)
+        return self._check_single_bash_command(command, auto_mode=auto_mode)
 
-    def _check_bash_segments(self, segments: list[str]) -> SandboxCheckResult:
-        results = [self._check_single_bash_command(segment) for segment in segments]
+    def _check_bash_segments(self, segments: list[str], *, auto_mode: bool = False) -> SandboxCheckResult:
+        results = [self._check_single_bash_command(segment, auto_mode=auto_mode) for segment in segments]
         denied = next((result for result in results if result.decision == "deny"), None)
         if denied:
             return denied
@@ -106,7 +108,7 @@ class SandboxGuard:
             reason="All chained bash commands are read-only or diagnostic commands",
         )
 
-    def _check_single_bash_command(self, command: str) -> SandboxCheckResult:
+    def _check_single_bash_command(self, command: str, *, auto_mode: bool = False) -> SandboxCheckResult:
         category = classify_bash_command(command)
 
         if category == "dangerous":
@@ -119,6 +121,13 @@ class SandboxGuard:
             )
 
         if category == "package_install":
+            if auto_mode and _is_auto_python_install(command):
+                return SandboxCheckResult(
+                    decision="allow",
+                    action="write",
+                    zone="project",
+                    reason="Python package installation is allowed in auto mode for the agent-alpha runtime",
+                )
             return SandboxCheckResult(
                 decision="ask",
                 action="write",
@@ -160,6 +169,7 @@ class SandboxGuard:
                 action="read",
                 workspace_root=self.workspace_root,
                 project_root=self.project_root,
+                auto_mode=auto_mode,
             )
             if zone in {"workspace", "project"}:
                 return SandboxCheckResult(
@@ -202,6 +212,7 @@ class SandboxGuard:
                     action=action,
                     workspace_root=self.workspace_root,
                     project_root=self.project_root,
+                    auto_mode=auto_mode,
                 )
                 for path in paths
             ]
@@ -247,3 +258,15 @@ class SandboxGuard:
             return Path(raw_path).resolve()
         except Exception:
             return None
+
+
+def _is_auto_python_install(command: str) -> bool:
+    try:
+        tokens = [token.lower() for token in shlex.split(command, posix=False)]
+    except ValueError:
+        return False
+    if len(tokens) >= 3 and tokens[:3] == ["uv", "pip", "install"]:
+        return True
+    if len(tokens) >= 2 and tokens[:2] == ["pip", "install"]:
+        return True
+    return len(tokens) >= 4 and tokens[0] in {"python", "python3", "py"} and tokens[1:4] == ["-m", "pip", "install"]

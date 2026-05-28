@@ -42,7 +42,7 @@ class SkillLoader:
 
             for skill_file in sorted(root.rglob("SKILL.md")):
                 meta, body = self._parse_skill_file(skill_file)
-                name = meta.get("name") or skill_file.parent.name
+                name = self._display_name(root, skill_file, meta)
                 description = meta.get("description")
                 if not name or not description:
                     continue
@@ -76,6 +76,17 @@ class SkillLoader:
             available = ", ".join(sorted(self.skills)) or "(none)"
             return f"Error: Unknown skill '{name}'. Available: {available}"
         return f'<skill name="{name}">\n{skill["body"]}\n</skill>'
+
+    def _display_name(self, root: Path, skill_file: Path, meta: Dict[str, str]) -> str:
+        name = meta.get("name") or skill_file.parent.name
+        try:
+            relative = skill_file.relative_to(root)
+        except ValueError:
+            return name
+        if len(relative.parts) >= 3:
+            namespace = relative.parts[0]
+            return f"{namespace}:{name}"
+        return name
 
     def _parse_skill_file(self, skill_file: Path) -> tuple[Dict[str, str], str]:
         text = skill_file.read_text(encoding="utf-8")

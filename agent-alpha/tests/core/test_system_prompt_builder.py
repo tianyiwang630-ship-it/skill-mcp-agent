@@ -74,3 +74,31 @@ def test_system_prompt_includes_runtime_paths_skills_mcp_and_prompt_docs():
     assert "Follow the session rules." in prompt
     assert "SOUL.md" in prompt
     assert "You are a calm research agent." in prompt
+
+
+def test_system_prompt_tells_agent_to_inspect_skill_docs_before_installing():
+    prompt = build_system_prompt(
+        workspace_root=Path("workspace"),
+        logs_dir=Path("logs"),
+        skills_dir=Path("skills"),
+        mcp_servers_dir=Path("mcp-servers"),
+        mcp_registry_path=Path("mcp-servers/registry.json"),
+    )
+
+    assert "inspect the source first" in prompt
+    assert "README" in prompt
+    assert "Do not infer or run dependency installation commands without explicit user confirmation." in prompt
+
+
+def test_system_prompt_includes_runtime_env_profile_rules():
+    prompt = build_system_prompt(
+        workspace_root=Path("workspace"),
+        logs_dir=Path("logs"),
+        skills_dir=Path("skills"),
+        mcp_servers_dir=Path("mcp-servers"),
+        mcp_registry_path=Path("mcp-servers/registry.json"),
+    )
+
+    assert "config/runtime_env.local.json" in prompt
+    assert "token, API key, cookie, auth header" in prompt
+    assert "temporary" in prompt
